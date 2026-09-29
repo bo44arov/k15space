@@ -108,7 +108,7 @@ p { margin: 0 0 1rem; }
 .equipment article p { margin: .8rem 0 0; color: var(--muted); }
 
 .steps { counter-reset: step; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-.step { min-height: 17rem; padding: 1.5rem; background: var(--white); border-radius: var(--radius); }
+.step { min-height: 17rem; padding: 1.5rem; background: var(--white); color: var(--ink); border-radius: var(--radius); }
 .step::before { counter-increment: step; content: '0' counter(step); display: block; margin-bottom: 5rem; font-weight: 700; color: var(--coral); }
 
 .faq { max-width: 60rem; margin-left: auto; }
