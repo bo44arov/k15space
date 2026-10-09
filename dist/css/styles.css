@@ -135,6 +135,7 @@ p { margin: 0 0 1rem; }
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
 .card { padding: 1.5rem; border: 1px solid var(--line); border-radius: var(--radius); }
 .card p { margin: .8rem 0 0; color: var(--muted); }
+.section--dark .card p { color: #f7f0de; }
 
 .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .contact-card { min-height: 20rem; padding: clamp(1.5rem, 4vw, 3rem); border-radius: var(--radius); background: var(--white); display: flex; flex-direction: column; align-items: flex-start; }
