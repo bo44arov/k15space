@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Конструктор події — тестова версія | K15.Space</title>
+  <meta name="description" content="Тестовий конструктор події K15.Space: оберіть час, студію та додаткові послуги й перегляньте попередню вартість без надсилання заявки.">
+  <link rel="canonical" href="https://k15space.com.ua/booking/">
+  <meta property="og:type" content="website"><meta property="og:locale" content="uk_UA">
+  <meta property="og:site_name" content="K15.Space"><meta property="og:title" content="Конструктор події — тестова версія | K15.Space">
+  <meta property="og:description" content="Зберіть свій формат події та перегляньте попередній розрахунок.">
+  <meta property="og:url" content="https://k15space.com.ua/booking/"><meta property="og:image" content="https://k15space.com.ua/images/og-k15.png">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Конструктор події K15.Space">
+  <meta name="twitter:description" content="Тестовий вибір студії, оснащення та послуг без надсилання заявки."><meta name="twitter:image" content="https://k15space.com.ua/images/og-k15.png">
+  <link rel="icon" type="image/svg+xml" href="/images/favicon.svg"><link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+  <link rel="stylesheet" href="/css/styles.css"><link rel="stylesheet" href="/css/booking.css">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Головна","item":"https://k15space.com.ua/"},{"@type":"ListItem","position":2,"name":"Конструктор події","item":"https://k15space.com.ua/booking/"}]}</script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-BNRTC3PVVC"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-BNRTC3PVVC');</script>
+</head>
+<body class="booking-page">
+  <a class="skip" href="#main">Перейти до змісту</a>
+  <header class="site-header"><div class="container nav"><a class="brand" href="/">K15<i>.</i>Space</a><nav class="nav-links" aria-label="Основна навігація"><a href="/">Простір</a><a href="/den-narodzhennya/">День народження</a><a href="/vechirky/">Вечірки</a><a href="/mayster-klasy/">Майстер-класи</a><a href="/orenda-prostoru/">Оренда</a><a href="/contacts/">Контакти</a></nav><a class="button" href="https://www.instagram.com/k15.space/" target="_blank" rel="noopener">Забронювати</a><button class="menu-toggle" type="button" aria-label="Відкрити меню" aria-expanded="false"><span></span></button></div></header>
+  <main id="main" class="container booking-main">
+    <nav class="breadcrumbs" aria-label="Навігаційний шлях"><a href="/">Головна</a><a href="/orenda-prostoru/">Оренда простору</a><span>Конструктор події</span></nav>
+    <div class="booking-intro"><div><p class="eyebrow">K15.Space</p><h1>Конструктор події</h1></div><p>Оберіть час, кількість гостей, студію та послуги. Перегляньте орієнтовну вартість.</p></div>
+    <div class="demo-notice"><strong>Тестова версія</strong><span>Календар вигаданий, ціни попередні. Нічого не надсилається й не бронюється.</span></div>
+    <noscript><p class="demo-notice">Для конструктора увімкніть JavaScript. Інформація про оренду є на <a href="/orenda-prostoru/">сторінці простору</a>.</p></noscript>
+    <div id="booking-app" hidden>
+      <nav class="wizard-progress" aria-label="Кроки конструктора"><ol>
+        <li><button type="button" data-step="0"><span>01</span>Час</button></li>
+        <li><button type="button" data-step="1"><span>02</span>Гості</button></li>
+        <li><button type="button" data-step="2"><span>03</span>Техніка</button></li>
+        <li><button type="button" data-step="3"><span>04</span>Студія</button></li>
+        <li><button type="button" data-step="4"><span>05</span>Деталі</button></li>
+        <li><button type="button" data-step="5"><span>06</span>Підсумок</button></li>
+      </ol></nav>
+      <div class="booking-grid">
+        <section class="wizard-card" aria-label="Налаштування події">
+          <form id="wizard-form" novalidate>
+            <section class="wizard-panel" data-panel="0" aria-labelledby="title-0">
+              <p class="eyebrow">Крок 1 / 6</p><h2 id="title-0" tabindex="-1">Дата й час оренди</h2><p class="step-description">Оберіть увесь час оренди разом із підготовкою та зняттям власного декору. Час — київський.</p>
+              <div class="input-grid"><label>Дата<input id="date" name="date" type="date" required></label><label>Початок<select id="start-time" name="startTime" required></select></label></div>
+              <fieldset><legend>Тривалість</legend><div class="choice-grid duration-choices">
+                <label class="choice"><input type="radio" name="durationChoice" value="120"><span>2 години</span></label>
+                <label class="choice"><input type="radio" name="durationChoice" value="180" checked><span>3 години</span></label>
+                <label class="choice"><input type="radio" name="durationChoice" value="300"><span>5 годин</span></label>
+                <label class="choice"><input type="radio" name="durationChoice" value="custom"><span>Інша</span></label>
+              </div></fieldset>
+              <label id="custom-duration-wrap" hidden>Тривалість у годинах<input id="custom-duration" name="customDuration" type="number" min="1" max="16" step="0.5" value="3"><small>Від 1 години, крок — 30 хвилин (тестове правило).</small></label>
+              <p id="interval-caption" class="interval-caption"></p>
+              <p class="field-note">Між орендами однієї студії потрібні 30 хвилин на прибирання. Цей час не входить у вашу оренду й не додається до вартості.</p>
+              <div id="availability-status" class="availability-status" role="status" aria-live="polite"></div>
+              <div id="date-alternatives" class="alternative-list"></div>
+              <details class="demo-calendar"><summary>Подивитися тестовий календар</summary><p>Однакові вигадані зайняті години щодня:</p><div><strong>AURA</strong><span>12:00–15:00</span></div><div><strong>SAKURA</strong><span>14:00–16:00</span></div><p>Після цих оренд AURA доступна з 15:30, SAKURA — з 16:30. Перед наступною орендою також залишаємо 30 хвилин на прибирання.</p><label class="inline-check"><input type="checkbox" id="calendar-error" name="calendarError">Спробувати помилку календаря</label></details>
+            </section>
+            <section class="wizard-panel" data-panel="1" aria-labelledby="title-1" hidden>
+              <p class="eyebrow">Крок 2 / 6</p><h2 id="title-1" tabindex="-1">Орієнтовна кількість гостей</h2><p class="step-description">Оберіть діапазон. Його можна змінити пізніше.</p>
+              <div class="guest-presets" aria-label="Орієнтовна кількість гостей"><button type="button" data-guest-range="1:5">До 5</button><button type="button" data-guest-range="6:10">До 10</button><button type="button" data-guest-range="11:15">До 15</button><button type="button" data-guest-range="16:20">До 20</button><button type="button" data-guest-range="21:35">До 35</button></div>
+              <p class="field-note">Для підбору студії враховуємо верхню межу діапазону.</p>
+              <p id="guest-room-note" class="guest-room-note" role="status" aria-live="polite"></p>
+              <fieldset><legend>Як розмістимо гостей?</legend><div class="choice-grid">
+                <label class="choice"><input type="radio" name="layout" value="one" checked><span><strong>Один стіл</strong><small>AURA або SAKURA</small></span></label>
+                <label class="choice"><input type="radio" name="layout" value="two"><span><strong>Два столи</strong><small id="two-table-note">Лише у SAKURA</small></span></label>
+                <label class="choice"><input type="radio" name="layout" value="free"><span><strong>Фуршет</strong><small>Вільне розміщення</small></span></label>
+                <label class="choice"><input type="radio" name="layout" value="chairs"><span><strong>Без столів</strong><small>Посадка на стільцях</small></span></label>
+              </div></fieldset>
+              <p class="prototype-policy">Попередні правила прототипу: AURA — до 12 гостей, один стіл у SAKURA — до 14; 15–19 гостей — SAKURA з іншою розстановкою, від 20 — обидві студії. Реальну місткість за форматом ще потрібно підтвердити.</p>
+              <p id="guest-status" class="inline-status" role="status"></p><div id="guest-alternatives" class="alternative-list"></div>
+            </section>
+            <section class="wizard-panel" data-panel="2" aria-labelledby="title-2" hidden>
+              <p class="eyebrow">Крок 3 / 6</p><h2 id="title-2" tabindex="-1">Обладнання</h2><p class="step-description">Проєктор і караоке є тільки у SAKURA. Вартість пакета — за весь час оренди.</p>
+              <fieldset><legend>Проєктор і караоке</legend><div class="choice-grid">
+                <label class="choice"><input type="radio" name="equipment" value="no" checked><span><strong>Без техніки</strong><small>+0 грн</small></span></label>
+                <label class="choice"><input type="radio" name="equipment" value="yes"><span><strong>Потрібні</strong><small>+500 грн · SAKURA</small></span></label>
+                <label class="choice choice-wide"><input type="radio" name="equipment" value="help"><span><strong>Допоможіть обрати</strong><small>Консультація без доплати в розрахунку</small></span></label>
+              </div></fieldset>
+              <fieldset id="laptop-options" hidden><legend>Пристрій для проєктора</legend><p class="field-note">Підключення через HDMI / Type-C. Телефон напряму не підключається.</p><div class="choice-grid">
+                <label class="choice"><input type="radio" name="laptop" value="own" checked><span><strong>Мій ноутбук</strong><small>+0 грн</small></span></label>
+                <label class="choice"><input type="radio" name="laptop" value="rental"><span><strong>Ноутбук K15.Space</strong><small>+200 грн</small></span></label>
+                <label class="choice choice-wide"><input type="radio" name="laptop" value="help"><span>Потрібна допомога з підключенням</span></label>
+              </div></fieldset>
+              <div id="equipment-status" class="inline-status" role="status"></div><div id="equipment-alternatives" class="alternative-list"></div>
+            </section>
+            <section class="wizard-panel" data-panel="3" aria-labelledby="title-3" hidden>
+              <p class="eyebrow">Крок 4 / 6</p><h2 id="title-3" tabindex="-1">Вибір студії</h2><p class="step-description">Тут лише варіанти, які підходять за тестовим календарем, кількістю гостей і технікою.</p>
+              <div id="room-options" class="room-options"></div><p id="room-reason" class="field-note"></p>
+            </section>
+            <section class="wizard-panel" data-panel="4" aria-labelledby="title-4" hidden>
+              <p class="eyebrow">Крок 5 / 6</p><h2 id="title-4" tabindex="-1">Додаткові послуги</h2><p class="step-description">Оберіть потрібні послуги. Зображення та розрахунок оновлюються одразу.</p>
+              <label class="choice extra-choice"><input type="checkbox" name="tableware" id="tableware"><span><strong>Посуд і келихи</strong><small id="tableware-price">500 грн до 10 гостей, далі +50 грн за гостя</small></span></label>
+              <label class="choice extra-choice"><input type="checkbox" name="food" id="food"><span><strong>Буде їжа або напої</strong><small>Показати варіанти скатертин</small></span></label>
+              <div id="food-options" hidden><label>Столів для їжі та напоїв<input id="food-tables" name="foodTables" type="number" min="1" max="4" step="1" value="1"><small>Це кількість столів для частування, а не схема посадки.</small></label>
+                <fieldset><legend>Скатертини</legend><div class="choice-grid">
+                  <label class="choice"><input type="radio" name="tablecloth" value="own" checked><span><strong>Мої / не потрібні</strong><small>+0 грн</small></span></label>
+                  <label class="choice"><input type="radio" name="tablecloth" value="disposable"><span><strong>Одноразові</strong><small>50 грн за стіл (2 шт.)</small></span></label>
+                  <label class="choice choice-wide"><input type="radio" name="tablecloth" value="fabric"><span><strong>Біла тканинна</strong><small>250 грн за стіл</small></span></label>
+                </div></fieldset>
+              </div>
+              <fieldset><legend>Оформлення</legend><p class="field-note">Фотозона й доріжка доступні лише у SAKURA, зокрема при оренді обох студій.</p><div class="choice-grid">
+                <label class="choice"><input type="checkbox" name="banner" id="banner"><span><strong>Фотозона</strong><small>+500 грн · SAKURA</small></span></label>
+                <label class="choice"><input type="checkbox" name="carpet" id="carpet"><span><strong>Доріжка</strong><small>+350 грн · SAKURA</small></span></label>
+                <label class="choice choice-wide"><input type="checkbox" name="decor" id="decor"><span><strong>Декор під ключ</strong><small>Консультація · вартість уточнюється</small></span></label>
+              </div></fieldset>
+            </section>
+            <section class="wizard-panel" data-panel="5" aria-labelledby="title-5" hidden>
+              <p class="eyebrow">Крок 6 / 6</p><h2 id="title-5" tabindex="-1">Підсумок і вартість</h2><p class="step-description">Це орієнтовний розрахунок за вибраним діапазоном гостей. Заявка не створюється.</p>
+              <div id="final-summary"></div><div id="final-quote"></div>
+              <p class="final-note">Тестова доступність не гарантує вільної дати. Остаточні умови й вартість підтверджує команда K15.Space. Тут немає оплати чи надсилання даних.</p>
+              <button class="text-button" type="button" id="restart">Почати новий розрахунок</button>
+            </section>
+            <p id="selection-message" class="inline-status" role="status" aria-live="polite"></p>
+            <p id="form-error" class="form-error" role="alert"></p>
+            <div class="wizard-actions"><button type="button" class="button button--ghost" id="back">← Назад</button><button type="submit" class="button" id="next">Далі →</button></div>
+          </form>
+        </section>
+        <aside class="preview-column" aria-label="Попередній вигляд і розрахунок">
+          <div class="preview-card"><div class="preview-heading"><p class="eyebrow">Вигляд студії</p><span id="preview-room-name">Приклад AURA</span></div>
+            <div id="preview-tabs" class="preview-tabs" hidden><button type="button" data-preview="aura">AURA</button><button type="button" data-preview="sakura">SAKURA</button></div>
+            <div id="studio-carousel" class="studio-carousel" aria-label="Доступні студії" hidden><button type="button" data-carousel-direction="-1" aria-label="Попередня студія">←</button><span id="carousel-status" role="status" aria-live="polite"></span><button type="button" data-carousel-direction="1" aria-label="Наступна студія">→</button></div>
+            <figure class="room-preview" id="room-preview" data-room="aura">
+              <img class="scene-base" id="scene-base" src="/images/booking/aura-base.jpg" width="260" height="347" alt="Студія AURA зі спільним столом — фото з форми K15.Space">
+              <div class="scene-layer cloth-layer" id="cloth-layer" hidden></div>
+              <img class="scene-layer dishes-layer" id="dishes-layer" src="/images/booking/aura-tableware.png" alt="Ілюстративне сервірування столу посудом" hidden>
+              <div class="projection-layer" id="projection-layer" hidden><span>▷</span><small>Ваша проєкція</small></div>
+              <div class="laptop-layer" id="laptop-layer" hidden><span>▰</span></div>
+              <div class="banner-layer" id="banner-layer" hidden><span>✦</span><small>Фотозона</small></div>
+              <div class="carpet-layer" id="carpet-layer" hidden></div>
+            </figure>
+            <p id="preview-caption" class="preview-caption">Ілюстрація для тестування. Студія ще не обрана. Кількість сервірувань на зображенні умовна.</p><div id="preview-tags" class="preview-tags"></div>
+          </div>
+          <section class="cart-card" aria-labelledby="cart-title"><div class="cart-heading"><h3 id="cart-title">Ваш розрахунок</h3><span>грн</span></div><div id="cart-items"></div><div class="cart-total"><span id="total-label">Попередньо</span><strong id="cart-total">—</strong></div><div id="cart-consultations"></div><p class="cart-note">Ціни та правила прототипу ще потрібно підтвердити. Бронювання не створюється.</p></section>
+        </aside>
+      </div>
+    </div>
+  </main>
+  <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand">K15.Space</div><div class="footer-col"><strong>Корисне</strong><a href="/orenda-prostoru/">Оренда простору</a><a href="/idei-ta-podii/">Ідеї та події</a></div><div class="footer-col"><strong>Зв’язок</strong><a href="https://www.instagram.com/k15.space/" target="_blank" rel="noopener">Instagram</a><a href="/contacts/">Хрещатик, 15 · Пасаж</a></div></div><div class="footer-bottom"><span>© <span data-year>2026</span> K15.Space</span><span>Простір для заходів у центрі Києва</span></div></div></footer>
+  <a class="mobile-book" href="https://www.instagram.com/k15.space/" target="_blank" rel="noopener">Написати @k15.space</a>
+  <script src="/js/main.js" defer></script><script src="/js/booking/app.mjs" type="module"></script>
+</body>
+</html>
