@@ -1,0 +1,105 @@
+.game-main { padding: 2.4rem 0 4rem; }
+.game-heading { display: flex; justify-content: space-between; align-items: end; gap: 2rem; margin-bottom: 1.6rem; }
+.game-heading h1 { font-size: clamp(1.7rem, 4vw, 3.1rem); line-height: 1.2; max-width: none; margin: .4rem 0 .7rem; }
+.game-heading p { margin: 0; max-width: 40rem; }
+.game-heading .eyebrow { color: var(--ink); }
+.total-progress { flex-shrink: 0; text-align: right; }
+.total-progress strong { display: block; font: 500 1.8rem var(--display); }
+.total-progress span { font-size: .8rem; }
+.game-shell { border: 1px solid var(--coral); border-radius: 1.5rem; overflow: hidden; background: var(--white); }
+.game-toolbar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; padding: .9rem 1.2rem; }
+.studio-tabs { display: flex; gap: .4rem; }
+.studio-tabs button, .game-control { border: 1px solid var(--line); border-radius: 3rem; padding: .65rem 1rem; min-height: 44px; background: var(--white); color: var(--ink); cursor: pointer; font-weight: 600; }
+.studio-tabs button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.studio-tabs button:disabled, .game-control:disabled { opacity: .55; cursor: default; }
+.game-tools { display: flex; gap: .5rem; }
+.game-control:hover:not(:disabled) { background: var(--paper); }
+.play-layout { display: grid; grid-template-columns: minmax(0, 1fr) 255px; border-top: 1px solid var(--line); }
+.scene-column { min-width: 0; position: relative; background: var(--paper); }
+.scene-scroll { overflow: auto; overscroll-behavior-x: contain; scrollbar-color: var(--coral) var(--paper); position: relative; }
+.scene-world { width: 100%; position: relative; aspect-ratio: var(--scene-ratio, 1.5); }
+.scene-scroll.is-zoomed { max-height: 580px; }
+.scene-scroll.is-zoomed .scene-world { width: max(150%, 900px); }
+#phaser-stage, #target-layer { position: absolute; inset: 0; }
+#phaser-stage canvas { width: 100% !important; height: 100% !important; display: block; pointer-events: none; }
+.photo-target { position: absolute; min-width: 44px; min-height: 44px; transform: translate(-50%, -50%); background: transparent; border: 0; border-radius: 50%; padding: 0; cursor: crosshair; touch-action: pan-x pan-y; }
+.photo-target:focus-visible { outline: 3px solid var(--blue); background: #f7f0de66; outline-offset: 2px; }
+.photo-target:disabled { cursor: default; }
+.scene-note { margin: 0; padding: .7rem 1rem; font-size: .8rem; border-top: 1px solid var(--line); }
+.search-list { padding: 1.25rem; border-left: 1px solid var(--line); }
+.list-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: 1.1rem; }
+.list-heading h2 { font: 500 1rem var(--display); margin: 0; }
+.list-heading span { font-weight: 700; }
+.object-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .65rem; }
+.object-card { display: flex; align-items: center; gap: .65rem; padding: .5rem; border: 1px solid var(--line); border-radius: .8rem; min-height: 66px; font-size: .84rem; line-height: 1.35; }
+.object-thumbnail { flex-shrink: 0; width: 48px; height: 48px; border-radius: .5rem; background-repeat: no-repeat; background-color: var(--paper); }
+.object-name { flex: 1; }
+.object-check { color: var(--ink); font-weight: 700; width: 1rem; }
+.object-card.is-found { background: var(--paper); border-color: var(--coral); }
+.object-card.is-found .object-name { text-decoration: line-through; }
+.game-message { min-height: 3.3em; margin: 1rem 0 0; font-size: .84rem; }
+.scene-cover { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; background: #4a1c0d66; padding: 1.25rem; }
+.scene-cover[hidden] { display: none; }
+.cover-card { background: var(--paper); border: 1px solid var(--coral); border-radius: 1.25rem; padding: clamp(1.2rem, 4vw, 2.5rem); max-width: 400px; text-align: center; box-shadow: 0 12px 40px #4a1c0d33; }
+.cover-card h2 { font-size: clamp(1.3rem, 3vw, 1.9rem); margin: .5rem 0 .8rem; }
+.cover-card p { font-size: .94rem; }
+.cover-mark { width: 48px; height: 48px; border: 1px solid var(--coral); border-radius: 50%; margin: 0 auto; display: grid; place-items: center; font-size: 1.8rem; }
+.cover-card .button { margin-top: .4rem; width: 100%; cursor: pointer; }
+.game-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; padding: .85rem 1.2rem; border-top: 1px solid var(--line); font-size: .8rem; }
+.game-bottom p { margin: 0; }
+.game-bottom button { border: none; background: transparent; color: var(--ink); text-decoration: underline; text-underline-offset: .2em; min-height: 44px; cursor: pointer; }
+.game-outro { display: flex; justify-content: space-between; gap: 1rem; align-items: center; margin-top: 1.5rem; font-size: .9rem; }
+.game-outro p { margin: 0; }
+.game-error { padding: 2rem; }
+.studio-tabs button[aria-disabled="true"] { border-style: dashed; }
+.door-button { display: block; margin: .6rem auto; max-width: calc(100% - 1.2rem); font-size: .8rem; }
+.door-button[hidden], #door-form[hidden], .clue-journal[hidden], #cover-action[hidden] { display: none; }
+.clue-journal { margin-top: 1.2rem; border-top: 1px solid var(--coral); padding-top: .8rem; }
+.clue-journal h3 { font-size: .9rem; margin: 0 0 .6rem; }
+.clue-journal ul { padding-left: 1.1rem; margin: 0; font-size: .8rem; }
+.clue-journal li + li { margin-top: .6rem; }
+.scene-column.door-mode { min-height: 580px; }
+.door-mode .cover-card { max-width: 440px; padding: 1.4rem; }
+.door-mode .cover-mark { display: none; }
+#door-form label { display: block; font-size: .85rem; font-weight: 700; }
+#door-code { display: block; width: 100%; max-width: 250px; margin: .6rem auto; padding: .6rem; text-align: center; font: 500 1.6rem var(--display); letter-spacing: .35em; color: var(--ink); background: var(--white); border: 2px solid var(--coral); border-radius: .7rem; min-height: 54px; }
+#door-code[aria-invalid="true"] { border-color: var(--blue); }
+.door-clues { background: var(--white); padding: .6rem; border-radius: .5rem; }
+#door-feedback { min-height: 2.8em; font-size: .82rem; margin: .5rem 0; }
+@media (max-width: 900px) {
+  .play-layout { grid-template-columns: minmax(0, 1fr); }
+  .search-list { border-left: 0; border-top: 1px solid var(--line); padding: 1rem; }
+  .object-list { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .5rem; }
+  .object-card { flex-direction: column; text-align: center; gap: .3rem; padding: .5rem .25rem; position: relative; }
+  .object-check { position: absolute; top: .2rem; right: .2rem; background: var(--paper); border-radius: 50%; }
+  .game-message { min-height: 1.5em; margin-top: .75rem; }
+}
+@media (max-width: 600px) {
+  .game-main { padding-top: 1.4rem; }
+  .game-heading { gap: .5rem; align-items: start; margin-bottom: 1.1rem; }
+  .game-heading h1 { max-width: 16rem; }
+  .game-heading p { font-size: .9rem; }
+  .game-heading .eyebrow { font-size: .65rem; }
+  .total-progress { padding-top: .2rem; }
+  .total-progress strong { font-size: 1.1rem; }
+  .total-progress span { font-size: .65rem; }
+  .game-shell { border-radius: 1rem; }
+  .game-toolbar { padding: .65rem; gap: .5rem; }
+  .studio-tabs { width: 100%; }
+  .studio-tabs button { flex: 1; }
+  .game-tools { width: 100%; }
+  .game-tools button { flex: 1; padding: .5rem .6rem; font-size: .8rem; }
+  .scene-scroll { height: 330px; }
+  .scene-world { width: max(100%, calc(330px * var(--scene-ratio))); }
+  .scene-scroll.is-zoomed { height: 440px; max-height: none; }
+  .scene-scroll.is-zoomed .scene-world { width: max(100%, calc(440px * var(--scene-ratio))); }
+  .scene-note { font-size: .73rem; padding: .6rem .7rem; }
+  .search-list { padding: .8rem .6rem; }
+  .list-heading { margin-bottom: .7rem; }
+  .list-heading h2 { font-size: .87rem; }
+  .object-card { font-size: .68rem; }
+  .object-thumbnail { width: 40px; height: 40px; }
+  .game-bottom { padding: .5rem .8rem; gap: .3rem; }
+  .game-outro { flex-direction: column; align-items: start; }
+}
+@media (prefers-reduced-motion: reduce) { .scene-scroll { scroll-behavior: auto; } }
