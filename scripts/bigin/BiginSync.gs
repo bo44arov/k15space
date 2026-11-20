@@ -229,6 +229,8 @@ function runBiginReport_(write) {
       console.log('Rows moved across months: ' + relocated);
       console.log('Rows moved into date order: ' + movedRows);
       SpreadsheetApp.flush();
+      applyBiginRowFontWeights_(reportSheet);
+      SpreadsheetApp.flush();
       properties.setProperty('BIGIN_REPORT_VERIFIED', target + ':' + tab);
     }
   } finally {
@@ -637,4 +639,43 @@ function migrateBiginReportColumns() {
   } finally {
     lock.releaseLock();
   }
+}
+
+
+// Only Tonya's days off are bold; monthly and column headings are regular too.
+function formatBiginReportRows() {
+  const lock=LockService.getScriptLock();lock.waitLock(10000);
+  try {
+    const p=PropertiesService.getScriptProperties();
+    const w=SpreadsheetApp.openById(requiredBiginProperty_(p,'BIGIN_SHEET_ID'));
+    const s=w.getSheetByName(biginReportTab_(p));
+    if(!s)throw new Error('Report not found');
+    applyBiginRowFontWeights_(s);
+    SpreadsheetApp.flush();
+    const values=s.getDataRange().getDisplayValues();
+    const weights=s.getDataRange().getFontWeights();
+    const boldRows=[];
+    values.forEach((row,i)=>{
+      const expected=i>0 && isBiginTonyaDayOff_(row[3]) ? 'bold' : 'normal';
+      if(weights[i].some(weight=>weight!==expected))throw new Error('Unexpected font weight in row '+(i+1));
+      if(expected==='bold')boldRows.push(i+1);
+    });
+    console.log(JSON.stringify({formatted:values.length,boldRows,verified:true}));
+  }finally{lock.releaseLock();}
+}
+
+function isBiginTonyaDayOff_(title) {
+  const text=String(title||'');
+  return /(^|[^\p{L}\p{M}\p{N}_])Тон(?:я|і|и)(?=$|[^\p{L}\p{M}\p{N}_])/iu.test(text) &&
+    /(?:вихідн|выходн)/iu.test(text);
+}
+
+function applyBiginRowFontWeights_(sheet) {
+  const range=sheet.getDataRange();
+  const rows=range.getDisplayValues();
+  range.setFontWeight('normal');
+  rows.forEach((row,index)=>{
+    if(index>0 && isBiginTonyaDayOff_(row[3]))
+      sheet.getRange(index+1,1,1,range.getNumColumns()).setFontWeight('bold');
+  });
 }
