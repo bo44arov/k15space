@@ -29,3 +29,31 @@ assert.equal(ctx.planBiginClients_(rows,[a],[links[0],links[1]]).jobs.length,0);
 console.log('Passed: all-client export, Instagram URL normalization, link repair, ID precision, append/update, duplicates, invalid handles and repeat-run idempotency.');
 
 assert.equal(ctx.formatBiginClient_({...a,Instagram:"'@example"})[4],'https://www.instagram.com/example/');
+
+// Extra fields preserve their types, custom source and original ID position.
+const extra=vm.runInContext('BIGIN_CLIENT_EXTRA_FIELDS',ctx);
+const rich={...a,field:'Instagram',field1:'2026-11-20T10:00:00Z',Email_Opt_Out:false,Owner:{name:'Test Owner',id:'998877665544332211'}};
+const extended=ctx.planBiginClients_([],[rich],[],extra);
+assert.equal(extended.jobs[0].values.length,28);
+assert.equal(extended.jobs[0].values[8],a.id);
+assert.equal(extended.jobs[0].values[9],'Instagram');
+assert.equal(extended.jobs[0].values[10],'20.11.2026 12:00');
+assert.equal(extended.jobs[0].values[21],'false');
+assert.match(extended.jobs[0].values[13],/998877665544332211/);
+assert.equal(ctx.planBiginClients_([Array.from(extended.jobs[0].values)],[rich],[extended.jobs[0].link],extra).jobs.length,0);
+// Hide by exact normalized phone, choose the richer card, preserve all values and IDs.
+const oldCard=Array.from(ctx.formatBiginClient_({...a,id:'100',Full_Name:'Client',Phone:'+380 67 123 4567'},extra));
+const fullCard=Array.from(ctx.formatBiginClient_({...a,id:'200',Full_Name:'Client Full',Phone:'0671234567',field:'Instagram',Description:'Details'},extra));
+const different=Array.from(ctx.formatBiginClient_({...a,id:'300',Phone:'0671234568'},extra));
+let privateProps={},hiddenRows=new Set();
+ctx.PropertiesService={getScriptProperties:()=>({getProperty:k=>k==='BIGIN_SHEET_ID'?'sheet':privateProps[k],setProperty:(k,v)=>privateProps[k]=v})};
+ctx.LockService={getScriptLock:()=>({waitLock(){},releaseLock(){}})};
+const mockSheet={getLastRow:()=>4,getRange:()=>({getDisplayValues:()=>[oldCard,fullCard,different]}),hideRows:r=>hiddenRows.add(r),isRowHiddenByUser:r=>hiddenRows.has(r)};
+ctx.SpreadsheetApp={openById:()=>({getSheetByName:()=>mockSheet}),flush(){}};
+ctx.hideBiginClientDuplicates();
+assert.equal(JSON.stringify([...hiddenRows]),'[2]');
+assert.equal(privateProps.BIGIN_CLIENTS_HIDDEN_IDS,'["100"]');
+ctx.hideBiginClientDuplicates();
+assert.equal(privateProps.BIGIN_CLIENTS_HIDDEN_IDS,'["100"]');
+assert.equal(ctx.planBiginClients_([oldCard,fullCard],[{...a,id:'100',Full_Name:'Client',Phone:'+380 67 123 4567'},{...a,id:'200',Full_Name:'Client Full',Phone:'0671234567',field:'Instagram',Description:'Details'}],undefined,extra).added,0);
+console.log('Passed: 28-column export, custom source/date, false values, object IDs, normalized duplicate selection and persistent hidden IDs.');
