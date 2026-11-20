@@ -14,7 +14,7 @@ const BIGIN_TAB = 'События Bigin';
 const BIGIN_HEADER = ['ID события', 'Начало · Киев', 'Конец · Киев', 'Статус', 'Длительность, ч'];
 const BIGIN_REPORT_HEADER = [
   'Дата', 'Створено', 'Зала', 'Захід', "Ім'я", 'Номер тел',
-  'Посилання на інсту', 'Інста', 'Години', 'Кількість годин', 'Додатокві години', 'Сумма',
+  'Посилання на інсту', 'Інста', 'Години', 'Кількість годин Bigin', 'Додатокві години', 'Сума Bigin', 'Фінальна сума',
   'Примітки', 'дод послуги', 'Інформація', 'Bigin Event ID'
 ];
 const BIGIN_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -192,17 +192,17 @@ function runBiginReport_(write) {
       width = Math.min(sheet.getMaxColumns(), BIGIN_REPORT_HEADER.length);
       const values = sheet.getRange(1, 1, expectedLastRow, width).getDisplayValues();
       const header = values.shift();
-      if (!BIGIN_REPORT_HEADER.slice(0, 15).every((name, i) => header[i] === name) ||
-          (header[15] && header[15] !== BIGIN_REPORT_HEADER[15])) {
+      if (!BIGIN_REPORT_HEADER.slice(0, -1).every((name, i) => header[i] === name) ||
+          (header[BIGIN_REPORT_HEADER.length - 1] && header[BIGIN_REPORT_HEADER.length - 1] !== BIGIN_REPORT_HEADER[BIGIN_REPORT_HEADER.length - 1])) {
         throw new Error('Заголовки итоговой вкладки отличаются от ожидаемых.');
       }
-      if (!header[15] && values.some(row => row[15])) {
-        throw new Error('Столбец P занят. Освободите его для Bigin Event ID.');
+      if (!header[BIGIN_REPORT_HEADER.length - 1] && values.some(row => row[BIGIN_REPORT_HEADER.length - 1])) {
+        throw new Error('Столбец Q занят. Освободите его для Bigin Event ID.');
       }
-      needsIdHeader = !header[15];
+      needsIdHeader = !header[BIGIN_REPORT_HEADER.length - 1];
       existing = values;
     }
-    const existingIds = new Set(existing.map(row => String(row[15] || '').trim()).filter(Boolean));
+    const existingIds = new Set(existing.map(row => String(row[BIGIN_REPORT_HEADER.length - 1] || '').trim()).filter(Boolean));
     const unseen = events.filter(event => !existingIds.has(event.id));
     const linked = new Set(unseen.map(biginContactId_).filter(Boolean));
     const contacts = linked.size
@@ -296,7 +296,7 @@ function planBiginReport_(existing, bookings) {
   const unlinked = [];
   existing.forEach((cells, index) => {
     const row = index + 2;
-    const id = String(cells[15] || '').trim();
+    const id = String(cells[BIGIN_REPORT_HEADER.length - 1] || '').trim();
     if (!id) {
       if (cells.some(Boolean) && !biginMonthHeader_(cells)) unlinked.push({row, cells});
       return;
@@ -425,7 +425,7 @@ function writeBiginReport_(sheet, plan, expectedLastRow, needsIdHeader) {
           dayOff[lastColumn - 1] = booking.id;
           return dayOff;
         }
-        return [...booking.primary.map(asCell), '', amount, '', '', asCell(booking.info), booking.id];
+        return [...booking.primary.map(asCell), '', amount, '=L' + n, '', '', asCell(booking.info), booking.id];
       });
       sheet.getRange(row, 1, size, lastColumn).setValues(values);
       row += size;
@@ -504,62 +504,14 @@ function biginAmountFormula_(row) {
   return '=ROUND((J' + row + '+K' + row + ')*IF(B' + row + '>DATE(2026,9,1),1300,800),2)';
 }
 
-// User requested migration in place without creating backup worksheets.
-function migrateBiginReportColumns() {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  try {
-    const properties = PropertiesService.getScriptProperties();
-    const target = requiredBiginProperty_(properties, 'BIGIN_SHEET_ID');
-    const workbook = SpreadsheetApp.openById(target);
-    const sheet = workbook.getSheetByName(biginReportTab_(properties));
-    if (!sheet || !sheet.getLastRow()) return;
-    const width = Math.min(sheet.getMaxColumns(), 16);
-    const data = sheet.getRange(1, 1, sheet.getLastRow(), width).getDisplayValues();
-    const header = data.shift();
-    if (BIGIN_REPORT_HEADER.every((name, i) => header[i] === name)) {
-      console.log('Schema already migrated; no changes.');
-      return;
-    }
-    const legacy = [...BIGIN_REPORT_HEADER.slice(0, 8), 'Кількість годин', 'Години',
-      'Сумма', 'Примітки', 'дод послуги', 'Інформація', 'Bigin Event ID'];
-    if (!legacy.slice(0, 14).every((name, i) => header[i] === name) ||
-        (header[14] && header[14] !== legacy[14]) ||
-        (!header[14] && data.some(row => row[14]))) {
-      throw new Error('Миграция остановлена: неизвестная структура вкладки.');
-    }
-    const monthRows = data.map((row, i) => biginMonthHeader_(row.slice(0,15)) ? i + 2 : 0).filter(Boolean);
-    if (sheet.getMaxColumns() < 15) sheet.insertColumnsAfter(sheet.getMaxColumns(), 15 - sheet.getMaxColumns());
-    monthRows.forEach(row => sheet.getRange(row, 1, 1, 14).breakApart());
-    sheet.moveColumns(sheet.getRange(1, 9, sheet.getMaxRows(), 1), 11);
-    sheet.insertColumnBefore(11);
-    sheet.getRange(1, 1, 1, 16).setValues([BIGIN_REPORT_HEADER]).setFontWeight('bold');
-    if (data.length) sheet.getRange(2, 11, data.length, 1).setNumberFormat('0.##');
-    let formulas = 0;
-    data.forEach((cells, i) => {
-      if (biginMonthHeader_(cells.slice(0,15))) return;
-      const title = String(cells[3] || '');
-      if (/(^|[^\p{L}\p{M}\p{N}_])Тоня(?=$|[^\p{L}\p{M}\p{N}_])/iu.test(title)) return;
-      if (cells[14] || /^\d{2}\.\d{2}\.\d{4}$/.test(String(cells[0]))) {
-        sheet.getRange(i + 2, 12).setFormula(biginAmountFormula_(i + 2));
-        formulas++;
-      }
-    });
-    monthRows.forEach(row => sheet.getRange(row, 1, 1, 15).merge());
-    sheet.hideColumns(16);
-    SpreadsheetApp.flush();
-    console.log(JSON.stringify({migrated:true,backupCreated:false,rows:data.length,formulas,headers:sheet.getRange(1,1,1,16).getValues()[0]}));
-  } finally { lock.releaseLock(); }
-}
-
-// Existing records: Bigin owns A (date), I (time interval), J (base hours).
+// Existing records: Bigin owns A (date), I (time interval), J (base hours). Final amount M follows L by formula unless manually replaced.
 // All other cells, formulas and manually entered values remain owned by the sheet.
 function planBiginScheduleUpdates_(existing, events) {
   const byId = new Map(events.map(event => [event.id, event]));
   const updates = [];
   const missing = [];
   existing.forEach((cells, index) => {
-    const id = String(cells[15] || '').trim();
+    const id = String(cells[BIGIN_REPORT_HEADER.length - 1] || '').trim();
     if (!id) return;
     const event = byId.get(id);
     if (!event) { missing.push(id); return; }
@@ -584,7 +536,7 @@ function planBiginScheduleUpdates_(existing, events) {
 
 function applyBiginScheduleUpdates_(sheet, updates) {
   if (!updates.length) return;
-  const rows = sheet.getRange(2, 16, sheet.getLastRow() - 1, 1).getDisplayValues();
+  const rows = sheet.getRange(2, BIGIN_REPORT_HEADER.length, sheet.getLastRow() - 1, 1).getDisplayValues();
   const byId = new Map(rows.map(([id], index) => [String(id).trim(), index + 2]));
   updates.forEach(update => {
     const row = byId.get(update.id);
@@ -601,18 +553,18 @@ function applyBiginScheduleUpdates_(sheet, updates) {
 function reconcileBiginMonthPlacement_(sheet) {
   let moved = 0;
   const read = () => sheet.getLastRow() > 1
-    ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 16).getDisplayValues() : [];
+    ? sheet.getRange(2, 1, sheet.getLastRow() - 1, BIGIN_REPORT_HEADER.length).getDisplayValues() : [];
   let section = '';
   const ids = [];
   read().forEach(row => {
     section = biginMonthHeader_(row) || section;
     const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String(row[0]));
-    const id = String(row[15] || '').trim();
+    const id = String(row[BIGIN_REPORT_HEADER.length - 1] || '').trim();
     if (id && match && section !== match[3] + match[2]) ids.push(id);
   });
   ids.forEach(id => {
     let rows = read();
-    let index = rows.findIndex(row => String(row[15] || '').trim() === id);
+    let index = rows.findIndex(row => String(row[BIGIN_REPORT_HEADER.length - 1] || '').trim() === id);
     if (index < 0) throw new Error('Исчез ID при переносе: ' + id);
     const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String(rows[index][0]));
     if (!match) return;
@@ -629,11 +581,11 @@ function reconcileBiginMonthPlacement_(sheet) {
       if (first <= sheet.getLastRow()) sheet.insertRowsBefore(first, 1);
       else if (first > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1);
       const name = BIGIN_MONTHS[Number(month.slice(4)) - 1] + ' ' + month.slice(0, 4);
-      sheet.getRange(first, 1, 1, 15).merge().setValue(name)
+      sheet.getRange(first, 1, 1, BIGIN_REPORT_HEADER.length - 1).merge().setValue(name)
         .setFontWeight('bold').setHorizontalAlignment('center')
         .setBorder(true, true, true, true, false, false, '#000000', SpreadsheetApp.BorderStyle.SOLID_THICK);
       rows = read();
-      index = rows.findIndex(row => String(row[15] || '').trim() === id);
+      index = rows.findIndex(row => String(row[BIGIN_REPORT_HEADER.length - 1] || '').trim() === id);
     }
     const headingIndex = rows.findIndex(row => biginMonthHeader_(row) === month);
     const nextHeading = rows.findIndex((row, i) => i > headingIndex && biginMonthHeader_(row));
@@ -642,4 +594,47 @@ function reconcileBiginMonthPlacement_(sheet) {
     moved++;
   });
   return moved;
+}
+
+// Upgrade the 16-column extra-hours report in place; no backup is created.
+function migrateBiginReportColumns() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const workbook = SpreadsheetApp.openById(requiredBiginProperty_(properties, 'BIGIN_SHEET_ID'));
+    const sheet = workbook.getSheetByName(biginReportTab_(properties));
+    if (!sheet || !sheet.getLastRow()) return;
+    const data = sheet.getRange(1, 1, sheet.getLastRow(), Math.min(sheet.getMaxColumns(), 17)).getDisplayValues();
+    const header = data.shift();
+    if (BIGIN_REPORT_HEADER.every((name, i) => header[i] === name)) {
+      console.log('Schema already migrated; final amounts preserved.');
+      return;
+    }
+    const legacy = [...BIGIN_REPORT_HEADER];
+    legacy.splice(12, 1);
+    legacy[9] = 'Кількість годин';
+    legacy[11] = 'Сумма';
+    if (!legacy.every((name, i) => header[i] === name)) {
+      throw new Error('Неизвестная схема: ожидается текущая таблица с дополнительными часами и ID в P.');
+    }
+    const months = data.map((row, i) => biginMonthHeader_(row.slice(0, 16)) ? i + 2 : 0).filter(Boolean);
+    months.forEach(row => sheet.getRange(row, 1, 1, 15).breakApart());
+    sheet.insertColumnBefore(13);
+    sheet.getRange(1, 1, 1, 17).setValues([BIGIN_REPORT_HEADER]).setFontWeight('bold');
+    let initialized = 0;
+    data.forEach((cells, i) => {
+      if (!cells[15]) return;
+      if (/(^|[^\p{L}\p{M}\p{N}_])Тоня(?=$|[^\p{L}\p{M}\p{N}_])/iu.test(String(cells[3] || ''))) return;
+      sheet.getRange(i + 2, 13).setFormula('=L' + (i + 2)).setNumberFormat('0.##');
+      initialized++;
+    });
+    months.forEach(row => sheet.getRange(row, 1, 1, 16).merge());
+    sheet.hideColumns(17);
+    SpreadsheetApp.flush();
+    console.log(JSON.stringify({migrated: true, initialized, backupCreated: false,
+      headers: sheet.getRange(1, 1, 1, 17).getValues()[0]}));
+  } finally {
+    lock.releaseLock();
+  }
 }
