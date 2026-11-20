@@ -746,50 +746,35 @@ function migrateBiginServiceColumn() {
 
 
 const BIGIN_CLIENTS_TAB = 'Клієнти Bigin';
-const BIGIN_CLIENTS_HEADER = ["Ім'я", 'Телефон', 'Мобільний', 'Email', 'Instagram', 'Опис', 'Створено', 'Оновлено', 'Bigin Contact ID'];
+const BIGIN_CLIENTS_HEADER = ['Створено', 'Ім’я Bigin', 'Прізвище Bigin', 'Телефон', 'Instagram', 'Звідки дізналися?', 'Опис', 'Bigin Contact ID'];
+const BIGIN_CLIENTS_LEGACY_HEADER = ["Ім'я", 'Телефон', 'Мобільний', 'Email', 'Instagram', 'Опис', 'Створено', 'Оновлено', 'Bigin Contact ID',
+  'Звідки дізналися?', 'Дата створення', 'Ім’я Bigin', 'Прізвище Bigin', 'Відповідальний', 'Ким створено', 'Ким оновлено',
+  'Вулиця', 'Місто', 'Область', 'Поштовий індекс', 'Країна', 'Відмова від email', 'Остання активність', 'Теги',
+  'Зображення контакту (ID)', 'Спосіб відписки', 'Час відписки', 'ID джерела створення'];
 
-// All remaining Contacts fields returned by the Bigin field metadata.
-// Existing A:I stay in place; ID remains hidden in I.
-const BIGIN_CLIENT_EXTRA_FIELDS = [
-  ['field', 'Звідки дізналися?', 'text'], ['field1', 'Дата створення', 'datetime'],
-  ['First_Name', "Ім’я Bigin", 'text'], ['Last_Name', 'Прізвище Bigin', 'text'],
-  ['Owner', 'Відповідальний', 'object'], ['Created_By', 'Ким створено', 'object'],
-  ['Modified_By', 'Ким оновлено', 'object'], ['Mailing_Street', 'Вулиця', 'text'],
-  ['Mailing_City', 'Місто', 'text'], ['Mailing_State', 'Область', 'text'],
-  ['Mailing_Zip', 'Поштовий індекс', 'text'], ['Mailing_Country', 'Країна', 'text'],
-  ['Email_Opt_Out', 'Відмова від email', 'boolean'], ['Last_Activity_Time', 'Остання активність', 'datetime'],
-  ['Tag', 'Теги', 'object'], ['Record_Image', 'Зображення контакту (ID)', 'text'],
-  ['Unsubscribed_Mode', 'Спосіб відписки', 'text'], ['Unsubscribed_Time', 'Час відписки', 'datetime'],
-  ['Record_Creation_Source_ID__s', 'ID джерела створення', 'text']
-];
-function biginClientExtraValue_(value, type) {
-  if (value === null || value === undefined) return '';
-  if (type === 'datetime' && value) {
-    const date = new Date(value);
-    if (Number.isFinite(+date)) return Utilities.formatDate(date, BIGIN_KYIV, 'dd.MM.yyyy HH:mm');
-  }
-  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+function biginClientCell_(value) {
+  return typeof value === 'string' && /^[=+\-@']/.test(value) ? "'" + value : value;
 }
 
-function formatBiginClient_(contact, extraFields = []) {
-  const name = contact.Full_Name || [contact.First_Name, contact.Last_Name].filter(Boolean).join(' ');
+function formatBiginClient_(contact) {
   const [link] = biginClientInstagram_(contact.Instagram);
-  const stamp = value => {
-    if (!value) return '';
-    const date = new Date(value);
-    return Number.isFinite(+date) ? Utilities.formatDate(date, BIGIN_KYIV, 'dd.MM.yyyy HH:mm') : String(value);
-  };
-  return [String(name || ''), String(contact.Phone || ''), String(contact.Mobile || ''), String(contact.Email || ''),
-    link || String(contact.Instagram || '').trim().replace(/^'+/, '').trim(), String(contact.Description || ''),
-    stamp(contact.Created_Time), stamp(contact.Modified_Time), contact.id,
-    ...extraFields.map(([api, , type]) => biginClientExtraValue_(contact[api], type))];
+  let created = String(contact.Created_Time || '');
+  const date = new Date(created);
+  if (created && Number.isFinite(+date)) created = Utilities.formatDate(date, BIGIN_KYIV, 'dd.MM.yyyy HH:mm');
+  return [created, String(contact.First_Name || ''), String(contact.Last_Name || ''), String(contact.Phone || ''),
+    link || String(contact.Instagram || '').trim().replace(/^'+/, '').trim(),
+    String(contact.field || ''), String(contact.Description || ''), contact.id];
 }
 
-function planBiginClients_(existing, contacts, existingLinks, extraFields = []) {
+function projectBiginClientLegacy_(row) {
+  return [6, 11, 12, 1, 4, 9, 5, 8].map(index => String(row[index] ?? ''));
+}
+
+function planBiginClients_(existing, contacts, existingLinks) {
   const positions = new Map();
   existing.forEach((cells, i) => {
     if (!cells.some(Boolean)) return;
-    const id = String(cells[8] || '').trim();
+    const id = String(cells[7] || '').trim();
     if (!/^\d+$/.test(id) || positions.has(id)) throw new Error('Некорректный или повторный Contact ID в строке ' + (i + 2));
     positions.set(id, i);
   });
@@ -798,14 +783,13 @@ function planBiginClients_(existing, contacts, existingLinks, extraFields = []) 
   contacts.forEach(contact => {
     if (typeof contact.id !== 'string' || !/^\d+$/.test(contact.id) || seen.has(contact.id)) throw new Error('Некорректный или повторный ID контакта Bigin.');
     seen.add(contact.id);
-    const values = formatBiginClient_(contact, extraFields);
+    const values = formatBiginClient_(contact);
     const link = biginClientInstagram_(contact.Instagram)[0];
     if (link) instagramLinks++;
     else if (contact.Instagram) invalidInstagram++;
     const previous = positions.get(contact.id);
-    if (previous === undefined) {
-      jobs.push({row: existing.length + 2 + added++, values, link});
-    } else if (JSON.stringify(existing[previous].map(value => String(value ?? ''))) !== JSON.stringify(values) ||
+    if (previous === undefined) jobs.push({row: existing.length + 2 + added++, values, link});
+    else if (JSON.stringify(existing[previous].map(value => String(value ?? ''))) !== JSON.stringify(values) ||
         (existingLinks && String(existingLinks[previous] || '') !== link)) {
       jobs.push({row: previous + 2, values, link}); updated++;
     }
@@ -813,43 +797,61 @@ function planBiginClients_(existing, contacts, existingLinks, extraFields = []) 
   return {jobs: jobs.sort((a, b) => a.row - b.row), added, updated, instagramLinks, invalidInstagram};
 }
 
+// Under the sync lock, migrate only the recognized 28-column schema.
+// Row order and hidden row flags are retained. No backup tab is created.
+function migrateBiginClientsCompact_(sheet, before) {
+  if (!BIGIN_CLIENTS_LEGACY_HEADER.every((name, i) => before[0][i] === name))
+    throw new Error('Неизвестная старая схема клиентов.');
+  if (sheet.getLastColumn() > 28) throw new Error('Справа от старой схемы есть данные. Миграция остановлена.');
+  const projected = before.slice(1).map(projectBiginClientLegacy_);
+  // Validate IDs before touching the sheet.
+  planBiginClients_(projected, []);
+  if (JSON.stringify(before) !== JSON.stringify(sheet.getRange(1, 1, before.length, 28).getDisplayValues()))
+    throw new Error('Клиенты изменились во время подготовки.');
+  sheet.getRange(1, 1, before.length, 8).setNumberFormat('@')
+    .setValues([BIGIN_CLIENTS_HEADER, ...projected].map(row => row.map(biginClientCell_)));
+  SpreadsheetApp.flush();
+  const expected = [BIGIN_CLIENTS_HEADER, ...projected];
+  if (JSON.stringify(sheet.getRange(1, 1, before.length, 8).getDisplayValues()) !== JSON.stringify(expected))
+    throw new Error('Проверка переноса восьми колонок не пройдена.');
+  if (sheet.getMaxColumns() > 8) sheet.deleteColumns(9, sheet.getMaxColumns() - 8);
+  sheet.showColumns(1, 7); sheet.hideColumns(8);
+  console.log(JSON.stringify({clientSchemaMigrated:true, columns:8, rows:projected.length, verified:true}));
+}
+
 function syncBiginClients() {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  const lock = LockService.getScriptLock(); lock.waitLock(10000);
   try {
     const properties = PropertiesService.getScriptProperties();
     const target = requiredBiginProperty_(properties, 'BIGIN_SHEET_ID');
     const workbook = SpreadsheetApp.openById(target);
     let sheet = workbook.getSheetByName(BIGIN_CLIENTS_TAB);
-    const header = [...BIGIN_CLIENTS_HEADER, ...BIGIN_CLIENT_EXTRA_FIELDS.map(f => f[1])];
-    const width = header.length;
+    let existing = [], existingLinks = [], legacy = null;
     const lastRow = sheet ? sheet.getLastRow() : 0;
-    let existing = [], existingLinks = [];
     if (lastRow) {
-      if (sheet.getMaxColumns() < BIGIN_CLIENTS_HEADER.length) throw new Error('Недостаточно колонок во вкладке клиентов.');
-      const values = sheet.getRange(1, 1, lastRow, Math.min(width, sheet.getMaxColumns())).getDisplayValues();
-      if (!BIGIN_CLIENTS_HEADER.every((name, i) => values[0][i] === name)) throw new Error('Заголовки вкладки клиентов отличаются от ожидаемых.');
-      if (values[0].slice(9).some((name, i) => name && name !== header[i + 9])) throw new Error('Новые колонки клиентов заняты другими данными.');
-      existing = values.slice(1).map(row => [...row, ...Array(Math.max(0, width - row.length)).fill('')]);
-      if (existing.length) existingLinks = sheet.getRange(2, 5, existing.length, 1).getRichTextValues().map(([value]) => value ? value.getLinkUrl() || '' : '');
+      const readWidth = Math.min(28, sheet.getMaxColumns());
+      const values = sheet.getRange(1, 1, lastRow, readWidth).getDisplayValues();
+      if (BIGIN_CLIENTS_HEADER.every((name, i) => values[0][i] === name)) existing = values.slice(1).map(row => row.slice(0, 8));
+      else if (BIGIN_CLIENTS_LEGACY_HEADER.every((name, i) => values[0][i] === name)) {
+        legacy = values; existing = values.slice(1).map(projectBiginClientLegacy_);
+      } else throw new Error('Заголовки вкладки клиентов отличаются от ожидаемых.');
+      if (existing.length && !legacy) existingLinks = sheet.getRange(2, 5, existing.length, 1).getRichTextValues().map(([v]) => v ? v.getLinkUrl() || '' : '');
     }
-    const token = requestBiginToken_({grant_type: 'refresh_token', refresh_token: requiredBiginProperty_(properties, 'BIGIN_REFRESH_TOKEN')}, properties).access_token;
+    const token = requestBiginToken_({grant_type:'refresh_token', refresh_token:requiredBiginProperty_(properties, 'BIGIN_REFRESH_TOKEN')}, properties).access_token;
     const contacts = readBiginModule_(BIGIN_EVENTS.replace(/Events$/, 'Contacts'),
-      [...new Set(['Full_Name','First_Name','Last_Name','Phone','Mobile','Email','Instagram','Description','Created_Time','Modified_Time', ...BIGIN_CLIENT_EXTRA_FIELDS.map(f => f[0])])].join(','), token);
-    const plan = planBiginClients_(existing, contacts, existingLinks, BIGIN_CLIENT_EXTRA_FIELDS);
-    if (sheet && (sheet.getLastRow() !== lastRow || (existing.length && JSON.stringify(existing) !== JSON.stringify(sheet.getRange(2, 1, existing.length, Math.min(width, sheet.getMaxColumns())).getDisplayValues().map(row => [...row, ...Array(Math.max(0, width - row.length)).fill('')]))))) {
-      throw new Error('Вкладка клиентов изменилась во время подготовки. Повторите запуск.');
-    }
+      'First_Name,Last_Name,Phone,Instagram,field,Description,Created_Time', token);
+    // Migration needs hyperlinks restored even when their text is unchanged.
+    const plan = planBiginClients_(existing, contacts, legacy ? existing.map(() => '') : existingLinks);
+    if (sheet && (sheet.getLastRow() !== lastRow || (!legacy && existing.length &&
+        JSON.stringify(existing) !== JSON.stringify(sheet.getRange(2, 1, existing.length, 8).getDisplayValues()))))
+      throw new Error('Вкладка клиентов изменилась во время подготовки.');
+    if (legacy) migrateBiginClientsCompact_(sheet, legacy);
     sheet = sheet || workbook.insertSheet(BIGIN_CLIENTS_TAB);
-    if (sheet.getMaxColumns() < width) sheet.insertColumnsAfter(sheet.getMaxColumns(), width - sheet.getMaxColumns());
-    sheet.getRange(1, 1, 1, width).setValues([header]).setFontWeight('bold');
-    if (!lastRow) {
-      sheet.getRange(1, 1, 1, 9).setValues([BIGIN_CLIENTS_HEADER]).setFontWeight('bold');
-      sheet.setFrozenRows(1);
-      sheet.setColumnWidth(1, 240); sheet.setColumnWidths(2, 3, 180);
-      sheet.setColumnWidth(5, 330); sheet.setColumnWidth(6, 400); sheet.setColumnWidths(7, 2, 180);
-      sheet.hideColumns(9);
-    }
+    if (sheet.getMaxColumns() < 8) sheet.insertColumnsAfter(sheet.getMaxColumns(), 8 - sheet.getMaxColumns());
+    sheet.getRange(1, 1, 1, 8).setValues([BIGIN_CLIENTS_HEADER]).setFontWeight('bold');
+    sheet.setFrozenRows(1); sheet.showColumns(1, 7); sheet.hideColumns(8);
+    sheet.setColumnWidth(1, 170); sheet.setColumnWidths(2, 3, 200);
+    sheet.setColumnWidth(5, 330); sheet.setColumnWidth(6, 210); sheet.setColumnWidth(7, 400);
     const lastNeeded = Math.max(1, ...plan.jobs.map(job => job.row));
     if (lastNeeded > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), lastNeeded - sheet.getMaxRows());
     const groups = [];
@@ -858,9 +860,8 @@ function syncBiginClients() {
       if (group && group[group.length - 1].row + 1 === job.row) group.push(job);
       else groups.push([job]);
     });
-    const asCell = value => typeof value === 'string' && /^[=+\-@']/.test(value) ? "'" + value : value;
     groups.forEach(group => {
-      sheet.getRange(group[0].row, 1, group.length, width).setNumberFormat('@').setValues(group.map(job => job.values.map(asCell)));
+      sheet.getRange(group[0].row, 1, group.length, 8).setNumberFormat('@').setValues(group.map(job => job.values.map(biginClientCell_)));
       sheet.getRange(group[0].row, 5, group.length, 1).setRichTextValues(group.map(job => {
         const text = SpreadsheetApp.newRichTextValue().setText(job.values[4]);
         if (job.link) text.setLinkUrl(job.link);
@@ -868,18 +869,18 @@ function syncBiginClients() {
       }));
     });
     SpreadsheetApp.flush();
-    const finalRows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, width).getDisplayValues() : [];
-    const links = finalRows.length ? sheet.getRange(2, 5, finalRows.length, 1).getRichTextValues().map(([value]) => value ? value.getLinkUrl() || '' : '') : [];
-    const verify = planBiginClients_(finalRows, contacts, links, BIGIN_CLIENT_EXTRA_FIELDS);
-    if (verify.jobs.length) throw new Error('Проверка выгрузки клиентов не пройдена.');
+    const finalRows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 8).getDisplayValues() : [];
+    const links = finalRows.length ? sheet.getRange(2, 5, finalRows.length, 1).getRichTextValues().map(([v]) => v ? v.getLinkUrl() || '' : '') : [];
+    if (planBiginClients_(finalRows, contacts, links).jobs.length) throw new Error('Проверка выгрузки клиентов не пройдена.');
     const hiddenIds = new Set(JSON.parse(properties.getProperty('BIGIN_CLIENTS_HIDDEN_IDS') || '[]'));
-    finalRows.forEach((row, i) => { if (hiddenIds.has(row[8])) sheet.hideRows(i + 2); });
-    const hiddenVerified = finalRows.filter((row, i) => hiddenIds.has(row[8]) && sheet.isRowHiddenByUser(i + 2)).length;
-    if (hiddenVerified !== finalRows.filter(row => hiddenIds.has(row[8])).length) throw new Error('Проверка скрытых дублей не пройдена.');
+    finalRows.forEach((row, i) => { if (hiddenIds.has(row[7])) sheet.hideRows(i + 2); });
+    const hiddenVerified = finalRows.filter((row, i) => hiddenIds.has(row[7]) && sheet.isRowHiddenByUser(i + 2)).length;
+    if (hiddenVerified !== finalRows.filter(row => hiddenIds.has(row[7])).length) throw new Error('Проверка скрытых дублей не пройдена.');
+    if (!sheet.isColumnHiddenByUser(8)) throw new Error('Contact ID должен быть скрыт.');
     properties.setProperty('BIGIN_CLIENTS_VERIFIED', target + ':' + BIGIN_CLIENTS_TAB);
-    console.log(JSON.stringify({fromBigin: contacts.length, added: plan.added, updated: plan.updated,
-      exportedColumns: width, hiddenDuplicates: hiddenVerified, instagramLinks: plan.instagramLinks, invalidInstagram: plan.invalidInstagram, verified: true,
-      sheetUrl: workbook.getUrl() + '#gid=' + sheet.getSheetId()}));
+    console.log(JSON.stringify({fromBigin:contacts.length, added:plan.added, updated:plan.updated, exportedColumns:8,
+      hiddenDuplicates:hiddenVerified, instagramLinks:plan.instagramLinks, invalidInstagram:plan.invalidInstagram,
+      verified:true, sheetUrl:workbook.getUrl() + '#gid=' + sheet.getSheetId()}));
   } finally { lock.releaseLock(); }
 }
 
@@ -896,42 +897,39 @@ function installBiginClientsHourlySync() {
   } finally { lock.releaseLock(); }
 }
 
+
 function biginClientInstagram_(raw) {
   return biginInstagram_(String(raw || '').trim().replace(/^'+/, '').trim());
 }
 
-// Hide lower-information cards sharing an exact normalized phone. Never delete CRM data.
-// IDs persist in private Script Properties; later imports keep these rows hidden.
+// Explicit manual duplicate search; hourly sync only preserves the existing hidden IDs.
 function hideBiginClientDuplicates() {
   const lock = LockService.getScriptLock(); lock.waitLock(10000);
   try {
     const p = PropertiesService.getScriptProperties();
     const sheet = SpreadsheetApp.openById(requiredBiginProperty_(p, 'BIGIN_SHEET_ID')).getSheetByName(BIGIN_CLIENTS_TAB);
-    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 9 + BIGIN_CLIENT_EXTRA_FIELDS.length).getDisplayValues();
-    const hidden = new Set(JSON.parse(p.getProperty('BIGIN_CLIENTS_HIDDEN_IDS') || '[]'));
-    const groups = new Map();
-    rows.forEach((r, i) => {
-      let phone = r[1].replace(/\D/g, '');
+    if (!BIGIN_CLIENTS_HEADER.every((name,i) => sheet.getRange(1,1,1,8).getDisplayValues()[0][i] === name))
+      throw new Error('Сначала выполните syncBiginClients для обновления структуры.');
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 8).getDisplayValues();
+    const hidden = new Set(JSON.parse(p.getProperty('BIGIN_CLIENTS_HIDDEN_IDS') || '[]')), groups = new Map();
+    rows.forEach((r,i) => {
+      let phone = r[3].replace(/\D/g, '');
       if (phone.length === 10 && phone[0] === '0') phone = '38' + phone;
       if (phone.length < 8) return;
       if (!groups.has(phone)) groups.set(phone, []);
-      groups.get(phone).push({r, row: i + 2});
+      groups.get(phone).push({r, row:i+2});
     });
-    // Prefer populated business fields, then a full personal name, then longer information.
-    const score = r => [r[1], r[2], r[3], r[4], r[5], r[9], r[10], ...r.slice(16, 21), r[23]].filter(Boolean).length * 10000 +
-      Math.min(r[0].trim().split(/\s+/).length, 3) * 100 + Math.min([r[5], r[9]].join('').length, 99);
-    let pairs = 0;
+    const score = r => r.slice(1,7).filter(Boolean).length * 10000 + Math.min((r[1]+' '+r[2]).trim().split(/\s+/).length,3)*100 + Math.min(r[6].length,99);
     groups.forEach(group => {
-      if (group.length < 2) return;
-      group.sort((a, b) => score(b.r) - score(a.r) || b.row - a.row);
-      group.slice(1).forEach(item => hidden.add(item.r[8]));
-      pairs++;
+      // Keep the previous user-approved winner when re-running the manual operation.
+      group.sort((a,b) => Number(hidden.has(a.r[7])) - Number(hidden.has(b.r[7])) || score(b.r)-score(a.r) || b.row-a.row);
+      group.slice(1).forEach(item => hidden.add(item.r[7]));
     });
     p.setProperty('BIGIN_CLIENTS_HIDDEN_IDS', JSON.stringify([...hidden]));
-    rows.forEach((r, i) => { if (hidden.has(r[8])) sheet.hideRows(i + 2); });
+    rows.forEach((r,i) => { if (hidden.has(r[7])) sheet.hideRows(i+2); });
     SpreadsheetApp.flush();
-    const hiddenRows = rows.map((r, i) => hidden.has(r[8]) ? i + 2 : null).filter(Boolean);
+    const hiddenRows = rows.map((r,i) => hidden.has(r[7]) ? i+2 : null).filter(Boolean);
     if (!hiddenRows.every(row => sheet.isRowHiddenByUser(row))) throw new Error('Не все дубли скрыты.');
-    console.log(JSON.stringify({duplicateGroups:pairs, hiddenRows, hiddenCount:hiddenRows.length, verified:true}));
+    console.log(JSON.stringify({hiddenRows, hiddenCount:hiddenRows.length, verified:true}));
   } finally { lock.releaseLock(); }
 }
