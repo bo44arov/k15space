@@ -204,21 +204,24 @@ function runBiginReport_(write) {
     }
     const existingIds = new Set(existing.map(row => String(row[BIGIN_REPORT_HEADER.length - 1] || '').trim()).filter(Boolean));
     const unseen = events.filter(event => !existingIds.has(event.id));
-    const linked = new Set(unseen.map(biginContactId_).filter(Boolean));
+    const linked = new Set(events.map(biginContactId_).filter(Boolean));
     const contacts = linked.size
       ? readBiginModule_(BIGIN_EVENTS.replace(/Events$/, 'Contacts'), 'Phone,Instagram', token, linked)
       : [];
     const contactsById = new Map(contacts.map(contact => [contact.id, contact]));
-    const bookings = unseen.map(event => formatBiginReportEvent_(event, contactsById));
+    if (contacts.length !== linked.size) throw new Error('Не все связанные контакты доступны в Bigin; обновление остановлено до записи.');
+    const allBookings = events.map(event => formatBiginReportEvent_(event, contactsById));
+    const bookings = allBookings.filter(booking => !existingIds.has(booking.id));
     const plan = planBiginReport_(existing, bookings);
-    const schedule = planBiginScheduleUpdates_(existing, events);
+    const schedule = planBiginScheduleUpdates_(existing, allBookings);
     console.log(JSON.stringify({fromBigin: events.length, linkedExisting: plan.bindings.length,
-      added: plan.additions.length, updated: schedule.updates.length, missingEvents: schedule.missing.length, scheduleChanges: schedule.updates.map(({id,previousDate,date,previousTimes,times}) => ({id,previousDate,date,previousTimes,times})), missingContacts: linked.size - contacts.length, preview: !write}));
+      added: plan.additions.length, updated: schedule.updates.length, missingEvents: schedule.missing.length, scheduleChanges: schedule.updates.map(({id,previousDate,date,previousTimes,times,changedColumns}) => ({id,previousDate,date,previousTimes,times,changedColumns})), missingContacts: linked.size - contacts.length, preview: !write}));
     if (write) {
       if (existing.length && JSON.stringify(existing) !== JSON.stringify(
         sheet.getRange(2, 1, existing.length, width).getDisplayValues())) {
         throw new Error('Строки изменились во время первого сопоставления. Повторите запуск.');
       }
+      const manualBefore = captureBiginManualFields_(sheet);
       const reportSheet = sheet || workbook.insertSheet(tab);
       writeBiginReport_(reportSheet, plan, expectedLastRow, needsIdHeader);
       SpreadsheetApp.flush();
@@ -231,6 +234,7 @@ function runBiginReport_(write) {
       SpreadsheetApp.flush();
       applyBiginRowFontWeights_(reportSheet);
       SpreadsheetApp.flush();
+      verifyBiginManualFields_(reportSheet, manualBefore);
       properties.setProperty('BIGIN_REPORT_VERIFIED', target + ':' + tab);
     }
   } finally {
@@ -420,7 +424,7 @@ function writeBiginReport_(sheet, plan, expectedLastRow, needsIdHeader) {
         const n = row + index;
         const amount = biginAmountFormula_(n);
         const title = booking.primary[3];
-        if (/(^|[^\p{L}\p{M}\p{N}_])Тоня(?=$|[^\p{L}\p{M}\p{N}_])/iu.test(title)) {
+        if (isBiginTonyaDayOff_(title)) {
           const dayOff = Array(lastColumn).fill('');
           dayOff[0] = booking.primary[0];
           dayOff[3] = asCell(title);
@@ -506,49 +510,72 @@ function biginAmountFormula_(row) {
   return '=ROUND((J' + row + '+K' + row + ')*IF(B' + row + '>DATE(2026,9,1),1300,800),2)';
 }
 
-// Existing records: Bigin owns A (date), I (time interval), J (base hours). Final amount M follows L by formula unless manually replaced.
-// All other cells, formulas and manually entered values remain owned by the sheet.
-function planBiginScheduleUpdates_(existing, events) {
-  const byId = new Map(events.map(event => [event.id, event]));
-  const updates = [];
-  const missing = [];
+// Imported fields: A:J and P. Manual fields K/M/N/O and the amount formula L are untouched.
+function planBiginScheduleUpdates_(existing, bookings) {
+  const byId = new Map(bookings.map(booking => [booking.id, booking]));
+  const updates = [], missing = [];
   existing.forEach((cells, index) => {
     const id = String(cells[BIGIN_REPORT_HEADER.length - 1] || '').trim();
     if (!id) return;
-    const event = byId.get(id);
-    if (!event) { missing.push(id); return; }
-    const start = new Date(event.Start_DateTime || NaN);
-    const end = new Date(event.End_DateTime || NaN);
-    if (!Number.isFinite(+start) || !Number.isFinite(+end) || end < start) {
-      throw new Error('Неверное время существующего события Bigin ' + id);
-    }
-    const date = Utilities.formatDate(start, BIGIN_KYIV, 'dd.MM.yyyy');
-    const times = [start, end].map(value => Utilities.formatDate(value, BIGIN_KYIV, 'HH:mm')).join('–');
-    const hours = (+end - +start) / 3600000;
-    const dayOff = /(^|[^\p{L}\p{M}\p{N}_])Тоня(?=$|[^\p{L}\p{M}\p{N}_])/iu.test(String(cells[3] || ''));
-    const oldHours = String(cells[9] ?? '').replace(',', '.');
-    if (String(cells[0]).trim() !== date || (!dayOff &&
-        (String(cells[8]).trim() !== times || oldHours === '' || Math.abs(Number(oldHours) - hours) > 1e-8 || !Number.isFinite(Number(oldHours))))) {
-      updates.push({id, date, dateSerial: biginDateSerial_(date), times, hours, dayOff,
-        previousDate: cells[0], previousTimes: cells[8], previousRow: index + 2});
-    }
+    const booking = byId.get(id);
+    if (!booking) { missing.push(id); return; }
+    const dayOff = isBiginTonyaDayOff_(booking.primary[3]);
+    const primary = dayOff ? [booking.primary[0], '', '', booking.primary[3], '', '', '', '', '', ''] : [...booking.primary];
+    const info = dayOff ? '' : booking.info;
+    const display = primary.map((value, i) => i < 2 && typeof value === 'number'
+      ? Utilities.formatDate(new Date((value - 25569) * 86400000), 'UTC', 'dd.MM.yyyy') : String(value ?? ''));
+    const changedColumns = [];
+    display.forEach((value, i) => {
+      const old = String(cells[i] ?? '');
+      const equal = i === 9 && typeof primary[i] === 'number'
+        ? old !== '' && Number.isFinite(Number(old.replace(',', '.'))) && Math.abs(Number(old.replace(',', '.')) - primary[i]) < 1e-8
+        : old === value;
+      if (!equal) changedColumns.push(i + 1);
+    });
+    if (String(cells[15] ?? '') !== String(info)) changedColumns.push(16);
+    if (changedColumns.length) updates.push({id, primary, info, dayOff, changedColumns,
+      date: display[0], previousDate: cells[0], times: primary[8], previousTimes: cells[8],
+      hours: primary[9], previousRow: index + 2});
   });
   return {updates, missing};
 }
 
 function applyBiginScheduleUpdates_(sheet, updates) {
   if (!updates.length) return;
-  const rows = sheet.getRange(2, BIGIN_REPORT_HEADER.length, sheet.getLastRow() - 1, 1).getDisplayValues();
-  const byId = new Map(rows.map(([id], index) => [String(id).trim(), index + 2]));
+  const ids = sheet.getRange(2, BIGIN_REPORT_HEADER.length, sheet.getLastRow() - 1, 1).getDisplayValues();
+  const positions = new Map(ids.map(([id], i) => [String(id).trim(), i + 2]));
+  const asCell = value => typeof value === 'string' && /^[=+\-@']/.test(value) ? "'" + value : value;
   updates.forEach(update => {
-    const row = byId.get(update.id);
-    if (!row) throw new Error('Исчез ID события перед обновлением: ' + update.id);
-    sheet.getRange(row, 1).setNumberFormat('dd.mm.yyyy').setValue(update.dateSerial);
-    if (!update.dayOff) {
-      sheet.getRange(row, 9).setNumberFormat('@').setValue(update.times);
-      sheet.getRange(row, 10).setValue(update.hours);
+    const row = positions.get(update.id);
+    if (!row) throw new Error('Исчез ID перед обновлением: ' + update.id);
+    if (update.changedColumns.some(column => column <= 10)) {
+      sheet.getRange(row, 1, 1, 2).setNumberFormat('dd.mm.yyyy');
+      sheet.getRange(row, 6, 1, 1).setNumberFormat('@');
+      sheet.getRange(row, 9, 1, 1).setNumberFormat('@');
+      sheet.getRange(row, 1, 1, 10).setValues([update.primary.map(asCell)]);
+    }
+    if (update.changedColumns.includes(16)) sheet.getRange(row, 16).setValue(asCell(update.info));
+  });
+}
+
+// Compare manual literals and formula presence by stable event ID, even after row moves.
+function captureBiginManualFields_(sheet) {
+  if (!sheet || sheet.getLastRow() < 2) return new Map();
+  const range = sheet.getRange(2, 1, sheet.getLastRow() - 1, BIGIN_REPORT_HEADER.length);
+  const values = range.getValues(), formulas = range.getFormulas();
+  return new Map(values.map((row, i) => [String(row[BIGIN_REPORT_HEADER.length - 1] || '').trim(),
+    [10, 12, 13, 14].map(column => formulas[i][column] ? {formula: true} : {value: row[column]})])
+    .filter(([id]) => id));
+}
+
+function verifyBiginManualFields_(sheet, before) {
+  const after = captureBiginManualFields_(sheet);
+  before.forEach((fields, id) => {
+    if (JSON.stringify(fields) !== JSON.stringify(after.get(id))) {
+      throw new Error('Ручные поля изменились во время синхронизации, ID: ' + id);
     }
   });
+  console.log('Manual fields verified: ' + before.size);
 }
 
 // Move whole rows across month sections; never rebuild customer/manual data.
