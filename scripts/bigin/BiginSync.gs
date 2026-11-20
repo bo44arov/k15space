@@ -4,7 +4,7 @@
  *   BIGIN_SHEET_ID, BIGIN_CLIENT_ID, BIGIN_CLIENT_SECRET, BIGIN_REFRESH_TOKEN.
  * Вместо BIGIN_REFRESH_TOKEN можно указать свежий BIGIN_AUTH_CODE и один раз
  * запустить exchangeBiginCode. Он сохранит токен и удалит одноразовый код.
- * Для итоговой вкладки, только добавление: previewBiginReportSync → syncBiginReport →
+ * Для итоговой вкладки, импорт и обновление расписания: previewBiginReportSync → syncBiginReport →
  * installBiginReportHourlySync. Название вкладки можно задать BIGIN_REPORT_TAB.
  * syncBiginEvents и installBiginHourlySync относятся к базовой выгрузке.
  */
@@ -194,7 +194,7 @@ function runBiginReport_(write) {
       const header = values.shift();
       if (!BIGIN_REPORT_HEADER.slice(0, 15).every((name, i) => header[i] === name) ||
           (header[15] && header[15] !== BIGIN_REPORT_HEADER[15])) {
-        throw new Error('Заголовки итоговой вкладки отличаются от ожидаемых. Для старой схемы запустите migrateBiginReportColumns.');
+        throw new Error('Заголовки итоговой вкладки отличаются от ожидаемых.');
       }
       if (!header[15] && values.some(row => row[15])) {
         throw new Error('Столбец P занят. Освободите его для Bigin Event ID.');
@@ -211,17 +211,22 @@ function runBiginReport_(write) {
     const contactsById = new Map(contacts.map(contact => [contact.id, contact]));
     const bookings = unseen.map(event => formatBiginReportEvent_(event, contactsById));
     const plan = planBiginReport_(existing, bookings);
+    const schedule = planBiginScheduleUpdates_(existing, events);
     console.log(JSON.stringify({fromBigin: events.length, linkedExisting: plan.bindings.length,
-      added: plan.additions.length, missingContacts: linked.size - contacts.length, preview: !write}));
+      added: plan.additions.length, updated: schedule.updates.length, missingEvents: schedule.missing.length, scheduleChanges: schedule.updates.map(({id,previousDate,date,previousTimes,times}) => ({id,previousDate,date,previousTimes,times})), missingContacts: linked.size - contacts.length, preview: !write}));
     if (write) {
-      if (plan.bindings.length && JSON.stringify(existing) !== JSON.stringify(
+      if (existing.length && JSON.stringify(existing) !== JSON.stringify(
         sheet.getRange(2, 1, existing.length, width).getDisplayValues())) {
         throw new Error('Строки изменились во время первого сопоставления. Повторите запуск.');
       }
       const reportSheet = sheet || workbook.insertSheet(tab);
       writeBiginReport_(reportSheet, plan, expectedLastRow, needsIdHeader);
       SpreadsheetApp.flush();
+      applyBiginScheduleUpdates_(reportSheet, schedule.updates);
+      SpreadsheetApp.flush();
+      const relocated = reconcileBiginMonthPlacement_(reportSheet);
       const movedRows = sortBiginMonthRows_(reportSheet);
+      console.log('Rows moved across months: ' + relocated);
       console.log('Rows moved into date order: ' + movedRows);
       SpreadsheetApp.flush();
       properties.setProperty('BIGIN_REPORT_VERIFIED', target + ':' + tab);
@@ -229,65 +234,6 @@ function runBiginReport_(write) {
   } finally {
     lock.releaseLock();
   }
-}
-
-
-/**
- * One-time migration from the original 15-column report.
- * Creates a full worksheet backup before structural changes.
- * Run this once before syncing an existing legacy report.
- */
-function migrateBiginReportColumns() {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
-  try {
-    const properties = PropertiesService.getScriptProperties();
-    const workbook = SpreadsheetApp.openById(requiredBiginProperty_(properties, 'BIGIN_SHEET_ID'));
-    const sheet = workbook.getSheetByName(biginReportTab_(properties));
-    if (!sheet || !sheet.getLastRow()) return;
-    const width = Math.min(sheet.getMaxColumns(), BIGIN_REPORT_HEADER.length);
-    const data = sheet.getRange(1, 1, sheet.getLastRow(), width).getDisplayValues();
-    const header = data.shift();
-    if (BIGIN_REPORT_HEADER.every((name, i) => header[i] === name)) return;
-    const legacy = [...BIGIN_REPORT_HEADER.slice(0, 8), 'Кількість годин', 'Години',
-      'Сумма', 'Примітки', 'дод послуги', 'Інформація', 'Bigin Event ID'];
-    if (!legacy.slice(0, 14).every((name, i) => header[i] === name) ||
-        (header[14] && header[14] !== legacy[14]) ||
-        (!header[14] && data.some(row => row[14]))) {
-      throw new Error('Миграция остановлена: неизвестная структура вкладки.');
-    }
-    // Record month rows before moving columns; merged ranges must be opened first.
-    const monthRows = data.map((row, index) => biginMonthHeader_(row) ? index + 2 : 0).filter(Boolean);
-    const backup = sheet.copyTo(workbook);
-    const backupName = sheet.getName().slice(0, 55) + ' backup ' +
-      Utilities.formatDate(new Date(), 'UTC', 'yyyyMMdd-HHmmss') + '-' + backup.getSheetId();
-    backup.setName(backupName);
-    console.log('Backup created: ' + backupName);
-    if (sheet.getMaxColumns() < 15) sheet.insertColumnsAfter(sheet.getMaxColumns(), 15 - sheet.getMaxColumns());
-    monthRows.forEach(row => sheet.getRange(row, 1, 1, 14).breakApart());
-    // Destination uses coordinates before the move: I is placed immediately after old J.
-    sheet.moveColumns(sheet.getRange(1, 9, sheet.getMaxRows(), 1), 11);
-    sheet.insertColumnBefore(11);
-    sheet.getRange(1, 1, 1, 16).setValues([BIGIN_REPORT_HEADER]).setFontWeight('bold');
-    // The inserted column may inherit the old amount's formatting.
-    if (data.length) sheet.getRange(2, 11, data.length, 1).setNumberFormat('0.##');
-    data.forEach((cells, index) => {
-      if (biginMonthHeader_(cells)) return;
-      if (cells[14] || /^\d{2}\.\d{2}\.\d{4}$/.test(String(cells[0]))) {
-        const row = index + 2;
-        sheet.getRange(row, 12).setFormula(biginAmountFormula_(row));
-      }
-    });
-    monthRows.forEach(row => sheet.getRange(row, 1, 1, 15).merge());
-    sheet.hideColumns(16);
-    SpreadsheetApp.flush();
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function biginAmountFormula_(row) {
-  return '=ROUND((J' + row + '+K' + row + ')*IF(B' + row + '>DATE(2026,9,1),1300,800),2)';
 }
 
 function biginReportTab_(properties) {
@@ -471,6 +417,14 @@ function writeBiginReport_(sheet, plan, expectedLastRow, needsIdHeader) {
       const values = entry.bookings.map((booking, index) => {
         const n = row + index;
         const amount = biginAmountFormula_(n);
+        const title = booking.primary[3];
+        if (/(^|[^\p{L}\p{M}\p{N}_])Тоня(?=$|[^\p{L}\p{M}\p{N}_])/iu.test(title)) {
+          const dayOff = Array(lastColumn).fill('');
+          dayOff[0] = booking.primary[0];
+          dayOff[3] = asCell(title);
+          dayOff[lastColumn - 1] = booking.id;
+          return dayOff;
+        }
         return [...booking.primary.map(asCell), '', amount, '', '', asCell(booking.info), booking.id];
       });
       sheet.getRange(row, 1, size, lastColumn).setValues(values);
@@ -543,4 +497,149 @@ function requiredBiginProperty_(properties, name) {
   const value = properties.getProperty(name)?.trim();
   if (!value) throw new Error('Заполните свойство скрипта ' + name + '.');
   return value;
+}
+
+
+function biginAmountFormula_(row) {
+  return '=ROUND((J' + row + '+K' + row + ')*IF(B' + row + '>DATE(2026,9,1),1300,800),2)';
+}
+
+// User requested migration in place without creating backup worksheets.
+function migrateBiginReportColumns() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const target = requiredBiginProperty_(properties, 'BIGIN_SHEET_ID');
+    const workbook = SpreadsheetApp.openById(target);
+    const sheet = workbook.getSheetByName(biginReportTab_(properties));
+    if (!sheet || !sheet.getLastRow()) return;
+    const width = Math.min(sheet.getMaxColumns(), 16);
+    const data = sheet.getRange(1, 1, sheet.getLastRow(), width).getDisplayValues();
+    const header = data.shift();
+    if (BIGIN_REPORT_HEADER.every((name, i) => header[i] === name)) {
+      console.log('Schema already migrated; no changes.');
+      return;
+    }
+    const legacy = [...BIGIN_REPORT_HEADER.slice(0, 8), 'Кількість годин', 'Години',
+      'Сумма', 'Примітки', 'дод послуги', 'Інформація', 'Bigin Event ID'];
+    if (!legacy.slice(0, 14).every((name, i) => header[i] === name) ||
+        (header[14] && header[14] !== legacy[14]) ||
+        (!header[14] && data.some(row => row[14]))) {
+      throw new Error('Миграция остановлена: неизвестная структура вкладки.');
+    }
+    const monthRows = data.map((row, i) => biginMonthHeader_(row.slice(0,15)) ? i + 2 : 0).filter(Boolean);
+    if (sheet.getMaxColumns() < 15) sheet.insertColumnsAfter(sheet.getMaxColumns(), 15 - sheet.getMaxColumns());
+    monthRows.forEach(row => sheet.getRange(row, 1, 1, 14).breakApart());
+    sheet.moveColumns(sheet.getRange(1, 9, sheet.getMaxRows(), 1), 11);
+    sheet.insertColumnBefore(11);
+    sheet.getRange(1, 1, 1, 16).setValues([BIGIN_REPORT_HEADER]).setFontWeight('bold');
+    if (data.length) sheet.getRange(2, 11, data.length, 1).setNumberFormat('0.##');
+    let formulas = 0;
+    data.forEach((cells, i) => {
+      if (biginMonthHeader_(cells.slice(0,15))) return;
+      const title = String(cells[3] || '');
+      if (/(^|[^\p{L}\p{M}\p{N}_])Тоня(?=$|[^\p{L}\p{M}\p{N}_])/iu.test(title)) return;
+      if (cells[14] || /^\d{2}\.\d{2}\.\d{4}$/.test(String(cells[0]))) {
+        sheet.getRange(i + 2, 12).setFormula(biginAmountFormula_(i + 2));
+        formulas++;
+      }
+    });
+    monthRows.forEach(row => sheet.getRange(row, 1, 1, 15).merge());
+    sheet.hideColumns(16);
+    SpreadsheetApp.flush();
+    console.log(JSON.stringify({migrated:true,backupCreated:false,rows:data.length,formulas,headers:sheet.getRange(1,1,1,16).getValues()[0]}));
+  } finally { lock.releaseLock(); }
+}
+
+// Existing records: Bigin owns A (date), I (time interval), J (base hours).
+// All other cells, formulas and manually entered values remain owned by the sheet.
+function planBiginScheduleUpdates_(existing, events) {
+  const byId = new Map(events.map(event => [event.id, event]));
+  const updates = [];
+  const missing = [];
+  existing.forEach((cells, index) => {
+    const id = String(cells[15] || '').trim();
+    if (!id) return;
+    const event = byId.get(id);
+    if (!event) { missing.push(id); return; }
+    const start = new Date(event.Start_DateTime || NaN);
+    const end = new Date(event.End_DateTime || NaN);
+    if (!Number.isFinite(+start) || !Number.isFinite(+end) || end < start) {
+      throw new Error('Неверное время существующего события Bigin ' + id);
+    }
+    const date = Utilities.formatDate(start, BIGIN_KYIV, 'dd.MM.yyyy');
+    const times = [start, end].map(value => Utilities.formatDate(value, BIGIN_KYIV, 'HH:mm')).join('–');
+    const hours = (+end - +start) / 3600000;
+    const dayOff = /(^|[^\p{L}\p{M}\p{N}_])Тоня(?=$|[^\p{L}\p{M}\p{N}_])/iu.test(String(cells[3] || ''));
+    const oldHours = String(cells[9] ?? '').replace(',', '.');
+    if (String(cells[0]).trim() !== date || (!dayOff &&
+        (String(cells[8]).trim() !== times || oldHours === '' || Math.abs(Number(oldHours) - hours) > 1e-8 || !Number.isFinite(Number(oldHours))))) {
+      updates.push({id, date, dateSerial: biginDateSerial_(date), times, hours, dayOff,
+        previousDate: cells[0], previousTimes: cells[8], previousRow: index + 2});
+    }
+  });
+  return {updates, missing};
+}
+
+function applyBiginScheduleUpdates_(sheet, updates) {
+  if (!updates.length) return;
+  const rows = sheet.getRange(2, 16, sheet.getLastRow() - 1, 1).getDisplayValues();
+  const byId = new Map(rows.map(([id], index) => [String(id).trim(), index + 2]));
+  updates.forEach(update => {
+    const row = byId.get(update.id);
+    if (!row) throw new Error('Исчез ID события перед обновлением: ' + update.id);
+    sheet.getRange(row, 1).setNumberFormat('dd.mm.yyyy').setValue(update.dateSerial);
+    if (!update.dayOff) {
+      sheet.getRange(row, 9).setNumberFormat('@').setValue(update.times);
+      sheet.getRange(row, 10).setValue(update.hours);
+    }
+  });
+}
+
+// Move whole rows across month sections; never rebuild customer/manual data.
+function reconcileBiginMonthPlacement_(sheet) {
+  let moved = 0;
+  const read = () => sheet.getLastRow() > 1
+    ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 16).getDisplayValues() : [];
+  let section = '';
+  const ids = [];
+  read().forEach(row => {
+    section = biginMonthHeader_(row) || section;
+    const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String(row[0]));
+    const id = String(row[15] || '').trim();
+    if (id && match && section !== match[3] + match[2]) ids.push(id);
+  });
+  ids.forEach(id => {
+    let rows = read();
+    let index = rows.findIndex(row => String(row[15] || '').trim() === id);
+    if (index < 0) throw new Error('Исчез ID при переносе: ' + id);
+    const match = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(String(rows[index][0]));
+    if (!match) return;
+    const month = match[3] + match[2];
+    let currentMonth = '';
+    rows.slice(0, index).forEach(row => { currentMonth = biginMonthHeader_(row) || currentMonth; });
+    if (currentMonth === month) return;
+    if (!rows.some(row => biginMonthHeader_(row) === month)) {
+      const next = rows.findIndex(row => {
+        const heading = biginMonthHeader_(row);
+        return heading && heading > month;
+      });
+      const first = next >= 0 ? next + 2 : sheet.getLastRow() + 1;
+      if (first <= sheet.getLastRow()) sheet.insertRowsBefore(first, 1);
+      else if (first > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1);
+      const name = BIGIN_MONTHS[Number(month.slice(4)) - 1] + ' ' + month.slice(0, 4);
+      sheet.getRange(first, 1, 1, 15).merge().setValue(name)
+        .setFontWeight('bold').setHorizontalAlignment('center')
+        .setBorder(true, true, true, true, false, false, '#000000', SpreadsheetApp.BorderStyle.SOLID_THICK);
+      rows = read();
+      index = rows.findIndex(row => String(row[15] || '').trim() === id);
+    }
+    const headingIndex = rows.findIndex(row => biginMonthHeader_(row) === month);
+    const nextHeading = rows.findIndex((row, i) => i > headingIndex && biginMonthHeader_(row));
+    const destination = nextHeading >= 0 ? nextHeading + 2 : sheet.getLastRow() + 1;
+    sheet.moveRows(sheet.getRange(index + 2, 1, 1, 1), destination);
+    moved++;
+  });
+  return moved;
 }

@@ -28,7 +28,7 @@ const booking={id:'8',key:sandbox.biginReportKey_(row[0],row[1],row[3],row[8]),p
 const unlinked=row.slice(); unlinked[15]='';
 const bound=sandbox.planBiginReport_([unlinked],[booking]);
 assert.equal(bound.bindings[0].id,'8');
-// A functional sheet double verifies structural moves, backup, formulas, and repeat migration.
+// A functional sheet double verifies structural moves, formulas and repeat migration without backups.
 let grid = [
  [...header.slice(0,8),'Кількість годин','Години','Сумма','Примітки','дод послуги','Інформація','Bigin Event ID'],
  ['ЛИСТОПАД 2026',...Array(14).fill('')],
@@ -40,6 +40,7 @@ const sheet={
  getMaxColumns:()=>grid[0].length, getName:()=> 'Report',
  getRange(r,c,n=1,w=1) { return {
    column:c,
+   getValues:()=>grid.slice(r-1,r-1+n).map(row=>row.slice(c-1,c-1+w)),
    getDisplayValues:()=>grid.slice(r-1,r-1+n).map(row=>row.slice(c-1,c-1+w).map(String)),
    setValues(values){values.forEach((row,i)=>row.forEach((v,j)=>grid[r-1+i][c-1+j]=v));return this;},
    setFontWeight(){return this;}, breakApart(){return this;}, merge(){return this;},
@@ -54,11 +55,11 @@ sandbox.PropertiesService={getScriptProperties:()=>({getProperty:name=>name==='B
 sandbox.SpreadsheetApp={openById:()=>({getSheetByName:()=>sheet}),flush(){}};
 sandbox.LockService={getScriptLock:()=>({waitLock(){},releaseLock(){}})};
 sandbox.migrateBiginReportColumns();
-assert.equal(backups,1); assert.equal(hidden,16);
+assert.equal(backups,0); assert.equal(hidden,16);
 assert.equal(grid[2][8],'10:00–12:00'); assert.equal(grid[2][9],2);
 assert.equal(grid[2][10],''); assert.equal(grid[2][11],sandbox.biginAmountFormula_(3));
 assert.deepEqual(grid[2].slice(12),['note','service','info','999999999999999999']);
-sandbox.migrateBiginReportColumns();assert.equal(backups,1);
+sandbox.migrateBiginReportColumns();assert.equal(backups,0);
 console.log('Passed: schema, amount including blank/fractional hours and tariff boundary, ID dedup, binding, legacy migration preservation and idempotency.');
 
 // Verify writes use the new column count and leave extra hours blank.
