@@ -743,3 +743,127 @@ function migrateBiginServiceColumn() {
     console.log(JSON.stringify({moved:true,verified:true,headers:after[0]}));
   }finally{lock.releaseLock();}
 }
+
+
+const BIGIN_CLIENTS_TAB = 'Клієнти Bigin';
+const BIGIN_CLIENTS_HEADER = ["Ім'я", 'Телефон', 'Мобільний', 'Email', 'Instagram', 'Опис', 'Створено', 'Оновлено', 'Bigin Contact ID'];
+
+function formatBiginClient_(contact) {
+  const name = contact.Full_Name || [contact.First_Name, contact.Last_Name].filter(Boolean).join(' ');
+  const [link] = biginClientInstagram_(contact.Instagram);
+  const stamp = value => {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isFinite(+date) ? Utilities.formatDate(date, BIGIN_KYIV, 'dd.MM.yyyy HH:mm') : String(value);
+  };
+  return [String(name || ''), String(contact.Phone || ''), String(contact.Mobile || ''), String(contact.Email || ''),
+    link || String(contact.Instagram || '').trim().replace(/^'+/, '').trim(), String(contact.Description || ''),
+    stamp(contact.Created_Time), stamp(contact.Modified_Time), contact.id];
+}
+
+function planBiginClients_(existing, contacts, existingLinks) {
+  const positions = new Map();
+  existing.forEach((cells, i) => {
+    if (!cells.some(Boolean)) return;
+    const id = String(cells[8] || '').trim();
+    if (!/^\d+$/.test(id) || positions.has(id)) throw new Error('Некорректный или повторный Contact ID в строке ' + (i + 2));
+    positions.set(id, i);
+  });
+  const seen = new Set(), jobs = [];
+  let added = 0, updated = 0, instagramLinks = 0, invalidInstagram = 0;
+  contacts.forEach(contact => {
+    if (typeof contact.id !== 'string' || !/^\d+$/.test(contact.id) || seen.has(contact.id)) throw new Error('Некорректный или повторный ID контакта Bigin.');
+    seen.add(contact.id);
+    const values = formatBiginClient_(contact);
+    const link = biginClientInstagram_(contact.Instagram)[0];
+    if (link) instagramLinks++;
+    else if (contact.Instagram) invalidInstagram++;
+    const previous = positions.get(contact.id);
+    if (previous === undefined) {
+      jobs.push({row: existing.length + 2 + added++, values, link});
+    } else if (JSON.stringify(existing[previous].map(value => String(value ?? ''))) !== JSON.stringify(values) ||
+        (existingLinks && String(existingLinks[previous] || '') !== link)) {
+      jobs.push({row: previous + 2, values, link}); updated++;
+    }
+  });
+  return {jobs: jobs.sort((a, b) => a.row - b.row), added, updated, instagramLinks, invalidInstagram};
+}
+
+function syncBiginClients() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const target = requiredBiginProperty_(properties, 'BIGIN_SHEET_ID');
+    const workbook = SpreadsheetApp.openById(target);
+    let sheet = workbook.getSheetByName(BIGIN_CLIENTS_TAB);
+    const lastRow = sheet ? sheet.getLastRow() : 0;
+    let existing = [], existingLinks = [];
+    if (lastRow) {
+      if (sheet.getMaxColumns() < BIGIN_CLIENTS_HEADER.length) throw new Error('Недостаточно колонок во вкладке клиентов.');
+      const values = sheet.getRange(1, 1, lastRow, BIGIN_CLIENTS_HEADER.length).getDisplayValues();
+      if (!BIGIN_CLIENTS_HEADER.every((name, i) => values[0][i] === name)) throw new Error('Заголовки вкладки клиентов отличаются от ожидаемых.');
+      existing = values.slice(1);
+      if (existing.length) existingLinks = sheet.getRange(2, 5, existing.length, 1).getRichTextValues().map(([value]) => value ? value.getLinkUrl() || '' : '');
+    }
+    const token = requestBiginToken_({grant_type: 'refresh_token', refresh_token: requiredBiginProperty_(properties, 'BIGIN_REFRESH_TOKEN')}, properties).access_token;
+    const contacts = readBiginModule_(BIGIN_EVENTS.replace(/Events$/, 'Contacts'),
+      'Full_Name,First_Name,Last_Name,Phone,Mobile,Email,Instagram,Description,Created_Time,Modified_Time', token);
+    const plan = planBiginClients_(existing, contacts, existingLinks);
+    if (sheet && (sheet.getLastRow() !== lastRow || (existing.length && JSON.stringify(existing) !== JSON.stringify(sheet.getRange(2, 1, existing.length, 9).getDisplayValues())))) {
+      throw new Error('Вкладка клиентов изменилась во время подготовки. Повторите запуск.');
+    }
+    sheet = sheet || workbook.insertSheet(BIGIN_CLIENTS_TAB);
+    if (sheet.getMaxColumns() < 9) sheet.insertColumnsAfter(sheet.getMaxColumns(), 9 - sheet.getMaxColumns());
+    if (!lastRow) {
+      sheet.getRange(1, 1, 1, 9).setValues([BIGIN_CLIENTS_HEADER]).setFontWeight('bold');
+      sheet.setFrozenRows(1);
+      sheet.setColumnWidth(1, 240); sheet.setColumnWidths(2, 3, 180);
+      sheet.setColumnWidth(5, 330); sheet.setColumnWidth(6, 400); sheet.setColumnWidths(7, 2, 180);
+      sheet.hideColumns(9);
+    }
+    const lastNeeded = Math.max(1, ...plan.jobs.map(job => job.row));
+    if (lastNeeded > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), lastNeeded - sheet.getMaxRows());
+    const groups = [];
+    plan.jobs.forEach(job => {
+      const group = groups[groups.length - 1];
+      if (group && group[group.length - 1].row + 1 === job.row) group.push(job);
+      else groups.push([job]);
+    });
+    const asCell = value => typeof value === 'string' && /^[=+\-@']/.test(value) ? "'" + value : value;
+    groups.forEach(group => {
+      sheet.getRange(group[0].row, 1, group.length, 9).setNumberFormat('@').setValues(group.map(job => job.values.map(asCell)));
+      sheet.getRange(group[0].row, 5, group.length, 1).setRichTextValues(group.map(job => {
+        const text = SpreadsheetApp.newRichTextValue().setText(job.values[4]);
+        if (job.link) text.setLinkUrl(job.link);
+        return [text.build()];
+      }));
+    });
+    SpreadsheetApp.flush();
+    const finalRows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 9).getDisplayValues() : [];
+    const links = finalRows.length ? sheet.getRange(2, 5, finalRows.length, 1).getRichTextValues().map(([value]) => value ? value.getLinkUrl() || '' : '') : [];
+    const verify = planBiginClients_(finalRows, contacts, links);
+    if (verify.jobs.length) throw new Error('Проверка выгрузки клиентов не пройдена.');
+    properties.setProperty('BIGIN_CLIENTS_VERIFIED', target + ':' + BIGIN_CLIENTS_TAB);
+    console.log(JSON.stringify({fromBigin: contacts.length, added: plan.added, updated: plan.updated,
+      instagramLinks: plan.instagramLinks, invalidInstagram: plan.invalidInstagram, verified: true,
+      sheetUrl: workbook.getUrl() + '#gid=' + sheet.getSheetId()}));
+  } finally { lock.releaseLock(); }
+}
+
+function installBiginClientsHourlySync() {
+  const lock = LockService.getScriptLock(); lock.waitLock(10000);
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const expected = requiredBiginProperty_(properties, 'BIGIN_SHEET_ID') + ':' + BIGIN_CLIENTS_TAB;
+    if (properties.getProperty('BIGIN_CLIENTS_VERIFIED') !== expected) throw new Error('Сначала успешно выполните syncBiginClients.');
+    const existing = ScriptApp.getProjectTriggers().filter(trigger => trigger.getHandlerFunction() === 'syncBiginClients');
+    if (!existing.length) ScriptApp.newTrigger('syncBiginClients').timeBased().everyHours(1).create();
+    console.log(JSON.stringify({handler: 'syncBiginClients', everyHours: 1, created: !existing.length,
+      triggers: ScriptApp.getProjectTriggers().filter(trigger => trigger.getHandlerFunction() === 'syncBiginClients').length}));
+  } finally { lock.releaseLock(); }
+}
+
+function biginClientInstagram_(raw) {
+  return biginInstagram_(String(raw || '').trim().replace(/^'+/, '').trim());
+}
