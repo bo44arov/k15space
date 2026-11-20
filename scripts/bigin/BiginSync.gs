@@ -14,8 +14,8 @@ const BIGIN_TAB = 'События Bigin';
 const BIGIN_HEADER = ['ID события', 'Начало · Киев', 'Конец · Киев', 'Статус', 'Длительность, ч'];
 const BIGIN_REPORT_HEADER = [
   'Дата', 'Створено', 'Зала', 'Захід', "Ім'я", 'Номер тел',
-  'Посилання на інсту', 'Інста', 'Години', 'Кількість годин Bigin', 'Додатокві години', 'Сума Bigin', 'Фінальна сума',
-  'Примітки', 'дод послуги', 'Інформація', 'Bigin Event ID'
+  'Посилання на інсту', 'Інста', 'Години', 'Кількість годин Bigin', 'Додатокві години', 'Сума Bigin', 'дод послуги', 'Фінальна сума',
+  'Примітки', 'Інформація', 'Bigin Event ID'
 ];
 const BIGIN_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BIGIN_KYIV = 'Europe/Kyiv';
@@ -427,7 +427,7 @@ function writeBiginReport_(sheet, plan, expectedLastRow, needsIdHeader) {
           dayOff[lastColumn - 1] = booking.id;
           return dayOff;
         }
-        return [...booking.primary.map(asCell), '', amount, '=L' + n, '', '', asCell(booking.info), booking.id];
+        return [...booking.primary.map(asCell), '', amount, '', '=L' + n, '', asCell(booking.info), booking.id];
       });
       sheet.getRange(row, 1, size, lastColumn).setValues(values);
       row += size;
@@ -614,6 +614,8 @@ function migrateBiginReportColumns() {
       return;
     }
     const legacy = [...BIGIN_REPORT_HEADER];
+    const [services] = legacy.splice(12, 1);
+    legacy.splice(14, 0, services);
     legacy.splice(12, 1);
     legacy[9] = 'Кількість годин';
     legacy[11] = 'Сумма';
@@ -623,12 +625,13 @@ function migrateBiginReportColumns() {
     const months = data.map((row, i) => biginMonthHeader_(row.slice(0, 16)) ? i + 2 : 0).filter(Boolean);
     months.forEach(row => sheet.getRange(row, 1, 1, 15).breakApart());
     sheet.insertColumnBefore(13);
+    sheet.moveColumns(sheet.getRange(1, 15, sheet.getMaxRows(), 1), 13);
     sheet.getRange(1, 1, 1, 17).setValues([BIGIN_REPORT_HEADER]).setFontWeight('bold');
     let initialized = 0;
     data.forEach((cells, i) => {
       if (!cells[15]) return;
       if (/(^|[^\p{L}\p{M}\p{N}_])Тоня(?=$|[^\p{L}\p{M}\p{N}_])/iu.test(String(cells[3] || ''))) return;
-      sheet.getRange(i + 2, 13).setFormula('=L' + (i + 2)).setNumberFormat('0.##');
+      sheet.getRange(i + 2, 14).setFormula('=L' + (i + 2)).setNumberFormat('0.##');
       initialized++;
     });
     months.forEach(row => sheet.getRange(row, 1, 1, 16).merge());
@@ -678,4 +681,38 @@ function applyBiginRowFontWeights_(sheet) {
     if(index>0 && isBiginTonyaDayOff_(row[3]))
       sheet.getRange(index+1,1,1,range.getNumColumns()).setFontWeight('bold');
   });
+}
+
+
+function migrateBiginServiceColumn() {
+  const lock=LockService.getScriptLock();lock.waitLock(10000);
+  try {
+    const p=PropertiesService.getScriptProperties();
+    const w=SpreadsheetApp.openById(requiredBiginProperty_(p,'BIGIN_SHEET_ID'));
+    const s=w.getSheetByName(biginReportTab_(p));
+    if(!s||!s.getLastRow())return;
+    const range=s.getRange(1,1,s.getLastRow(),17);
+    const before=range.getValues(),labels=range.getDisplayValues();
+    if(BIGIN_REPORT_HEADER.every((name,i)=>labels[0][i]===name)){
+      console.log('Service column already in place.');return;
+    }
+    const legacy=[...BIGIN_REPORT_HEADER];
+    const [services]=legacy.splice(12,1);legacy.splice(14,0,services);
+    if(!legacy.every((name,i)=>labels[0][i]===name))throw new Error('Unexpected report schema');
+    const months=labels.slice(1).map((row,i)=>biginMonthHeader_(row)?i+2:0).filter(Boolean);
+    months.forEach(row=>s.getRange(row,1,1,16).breakApart());
+    s.moveColumns(s.getRange(1,15,s.getMaxRows(),1),13);
+    s.getRange(1,1,1,17).setValues([BIGIN_REPORT_HEADER]);
+    months.forEach(row=>s.getRange(row,1,1,16).merge());
+    applyBiginRowFontWeights_(s);SpreadsheetApp.flush();
+    const after=range.getValues();
+    before.slice(1).forEach((row,i)=>{
+      if(!row[16])return;
+      const current=after[i+1];
+      if(JSON.stringify([row[14],row[12],row[13],row[15],row[16]])!==
+         JSON.stringify([current[12],current[13],current[14],current[15],current[16]]))
+        throw new Error('Column move verification failed in row '+(i+2));
+    });
+    console.log(JSON.stringify({moved:true,verified:true,headers:after[0]}));
+  }finally{lock.releaseLock();}
 }

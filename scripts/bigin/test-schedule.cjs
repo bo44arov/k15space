@@ -9,7 +9,7 @@ function formatDate(d, timezone, format) {
 const ctx={console,Date,Map,Set,Utilities:{formatDate},SpreadsheetApp:{BorderStyle:{SOLID_THICK:1}}};
 vm.createContext(ctx);vm.runInContext(source,ctx);
 const heading = name=>[name,...Array(17).fill('')];
-const row=(id,date,times,hours)=>[date,'01.09.2026','Sakura','Event','Name','Phone','link','handle',times,hours,'0.5','=manualFormula','=L3','note','services','private description',id,'beyond schema'];
+const row=(id,date,times,hours)=>[date,'01.09.2026','Sakura','Event','Name','Phone','link','handle',times,hours,'0.5','=manualFormula','services','=L3','note','private description',id,'beyond schema'];
 const event=(id,start='2026-12-20T16:00:00+02:00',end='2026-12-20T21:00:00+02:00')=>({id,Start_DateTime:start,End_DateTime:end});
 const original=row('123','15.11.2026','16:00–20:00','4');
 const snapshot=JSON.stringify(original);
